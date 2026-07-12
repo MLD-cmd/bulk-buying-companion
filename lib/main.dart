@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'data/repositories/auth_repository.dart';
+import 'data/repositories/deal_repository.dart';
 import 'data/repositories/hub_repository.dart';
 import 'models/app_user.dart';
 import 'ui/auth/auth_screen.dart';
@@ -25,6 +26,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
           dispose: (_, repository) => repository.dispose(),
         ),
         Provider<HubRepository>(create: (_) => MockHubRepository()),
+        Provider<DealRepository>(create: (_) => MockDealRepository()),
         ChangeNotifierProvider<JoinHubViewModel>(
           create: (context) => JoinHubViewModel(
             authRepository: context.read<AuthRepository>(),

@@ -174,6 +174,21 @@ void main() {
     expect(find.text('Joined'), findsOneWidget);
   });
 
+  testWidgets('Split Board opens from the hub banner and lists deals', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await signIn(tester);
+
+    await tester.tap(find.text('Join').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View deals'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Split Board'), findsOneWidget);
+    expect(find.text('Egg Tray (30s) — Split 3 ways'), findsOneWidget);
+  });
+
   testWidgets('Profile screen shows the joined hub after joining', (
     tester,
   ) async {
