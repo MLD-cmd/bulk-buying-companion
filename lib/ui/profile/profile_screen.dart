@@ -58,29 +58,55 @@ class ProfileScreen extends StatelessWidget {
               Text(
                 user.displayName ?? 'Student',
                 textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
               ),
               Text(
                 user.eduEmail,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 28),
               Text(
                 'CURRENT HUB',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      letterSpacing: 0.6,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  letterSpacing: 0.6,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 8),
               _CurrentHubTile(hub: viewModel.currentHub),
+              const SizedBox(height: 20),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                ),
+                leading: Icon(
+                  Icons.logout,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  'Log out',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: const Text('Return to the student login screen'),
+                onTap: () async {
+                  await viewModel.signOut();
+                  if (!context.mounted) return;
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                },
+              ),
             ],
           );
         },
@@ -117,7 +143,10 @@ class _CurrentHubTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.home_outlined, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              Icons.home_outlined,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(

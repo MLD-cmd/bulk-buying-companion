@@ -14,6 +14,8 @@ class JoinHubViewModel extends ChangeNotifier {
   })  : _authRepository = authRepository,
         _hubRepository = hubRepository {
     _authSub = _authRepository.authStateChanges.listen(_onAuthChanged);
+    final currentUser = _authRepository.currentUser;
+    if (currentUser != null) _load(currentUser.uid);
   }
 
   final AuthRepository _authRepository;

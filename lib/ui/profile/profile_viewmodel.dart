@@ -9,8 +9,8 @@ class ProfileViewModel extends ChangeNotifier {
   ProfileViewModel({
     required AuthRepository authRepository,
     required HubRepository hubRepository,
-  })  : _authRepository = authRepository,
-        _hubRepository = hubRepository {
+  }) : _authRepository = authRepository,
+       _hubRepository = hubRepository {
     _load();
   }
 
@@ -24,6 +24,8 @@ class ProfileViewModel extends ChangeNotifier {
   AppUser? get user => _user;
   Hub? get currentHub => _currentHub;
   bool get isLoading => _isLoading;
+
+  Future<void> signOut() => _authRepository.signOut();
 
   Future<void> _load() async {
     final user = _authRepository.currentUser;

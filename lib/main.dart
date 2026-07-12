@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/hub_repository.dart';
+import 'models/app_user.dart';
+import 'ui/auth/auth_screen.dart';
 import 'ui/hub/join_hub_screen.dart';
 import 'ui/hub/join_hub_viewmodel.dart';
 import 'ui/shared/app_theme.dart';
@@ -18,10 +20,10 @@ class BulkBuyingCompanionApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // JT: swap MockAuthRepository for the real Firebase/Supabase
-        // implementation here once Student Registration & Login lands.
-        // Everything below only depends on the AuthRepository interface.
-        Provider<AuthRepository>(create: (_) => MockAuthRepository()),
+        Provider<AuthRepository>(
+          create: (_) => MockAuthRepository(),
+          dispose: (_, repository) => repository.dispose(),
+        ),
         Provider<HubRepository>(create: (_) => MockHubRepository()),
         ChangeNotifierProvider<JoinHubViewModel>(
           create: (context) => JoinHubViewModel(
@@ -35,8 +37,29 @@ class BulkBuyingCompanionApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
-        home: const JoinHubScreen(),
+        home: const AuthGate(),
       ),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = context.read<AuthRepository>();
+    return StreamBuilder<AppUser?>(
+      stream: repository.authStateChanges,
+      initialData: repository.currentUser,
+      builder: (context, snapshot) {
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          child: snapshot.data == null
+              ? const AuthScreen(key: ValueKey('auth-screen'))
+              : const JoinHubScreen(key: ValueKey('join-hub-screen')),
+        );
+      },
     );
   }
 }
