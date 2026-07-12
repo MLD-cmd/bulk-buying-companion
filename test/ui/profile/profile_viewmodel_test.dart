@@ -73,6 +73,18 @@ void main() {
     expect(await operation, isFalse);
     expect(viewModel.errorMessage, 'Could not log out. Please try again.');
   });
+
+  test('stops loading and reports an error when hub lookup fails', () async {
+    final viewModel = ProfileViewModel(
+      authRepository: _DelayedSignOutRepository(),
+      hubRepository: _FailingHubRepository(),
+    );
+
+    await Future<void>.delayed(Duration.zero);
+
+    expect(viewModel.isLoading, isFalse);
+    expect(viewModel.errorMessage, 'Could not load profile. Please try again.');
+  });
 }
 
 class _DelayedSignOutRepository implements AuthRepository {
@@ -116,6 +128,24 @@ class _EmptyHubRepository implements HubRepository {
 
   @override
   Future<List<Hub>> getHubs() async => const [];
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
+
+class _FailingHubRepository implements HubRepository {
+  @override
+  Future<String?> getCurrentHubId(String userId) {
+    throw StateError('membership table unavailable');
+  }
+
+  @override
+  Future<List<Hub>> getHubs() {
+    throw StateError('hub table unavailable');
+  }
 
   @override
   Future<void> joinHub({required String userId, required String hubId}) async {}

@@ -53,21 +53,27 @@ class ProfileViewModel extends ChangeNotifier {
   Future<void> _load() async {
     final user = _authRepository.currentUser;
     _user = user;
+    _errorMessage = null;
 
-    if (user != null) {
-      final hubId = await _hubRepository.getCurrentHubId(user.uid);
-      if (hubId != null) {
-        final hubs = await _hubRepository.getHubs();
-        for (final hub in hubs) {
-          if (hub.id == hubId) {
-            _currentHub = hub;
-            break;
+    try {
+      if (user != null) {
+        final hubId = await _hubRepository.getCurrentHubId(user.uid);
+        if (hubId != null) {
+          final hubs = await _hubRepository.getHubs();
+          for (final hub in hubs) {
+            if (hub.id == hubId) {
+              _currentHub = hub;
+              break;
+            }
           }
         }
       }
+    } catch (_) {
+      _currentHub = null;
+      _errorMessage = 'Could not load profile. Please try again.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    _isLoading = false;
-    notifyListeners();
   }
 }

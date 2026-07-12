@@ -11,8 +11,8 @@ class JoinHubViewModel extends ChangeNotifier {
   JoinHubViewModel({
     required AuthRepository authRepository,
     required HubRepository hubRepository,
-  })  : _authRepository = authRepository,
-        _hubRepository = hubRepository {
+  }) : _authRepository = authRepository,
+       _hubRepository = hubRepository {
     _authSub = _authRepository.authStateChanges.listen(_onAuthChanged);
     final currentUser = _authRepository.currentUser;
     if (currentUser != null) _load(currentUser.uid);
@@ -59,15 +59,22 @@ class JoinHubViewModel extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final results = await Future.wait([
-      _hubRepository.getHubs(),
-      _hubRepository.getCurrentHubId(userId),
-    ]);
+    try {
+      final results = await Future.wait([
+        _hubRepository.getHubs(),
+        _hubRepository.getCurrentHubId(userId),
+      ]);
 
-    _hubs = results[0] as List<Hub>;
-    _joinedHubId = results[1] as String?;
-    _isLoading = false;
-    notifyListeners();
+      _hubs = results[0] as List<Hub>;
+      _joinedHubId = results[1] as String?;
+    } catch (_) {
+      _hubs = const [];
+      _joinedHubId = null;
+      _pendingSwitchId = null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   void setSearchQuery(String query) {
