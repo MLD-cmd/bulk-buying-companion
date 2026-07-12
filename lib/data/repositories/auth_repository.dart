@@ -11,10 +11,8 @@ class AuthFailure implements Exception {
   String toString() => message;
 }
 
-class SchoolEmailValidator {
-  SchoolEmailValidator._();
-
-  static const approvedDomains = <String>{'usjr.edu.ph'};
+class EmailValidator {
+  EmailValidator._();
 
   static bool isValid(String value) {
     final email = value.trim().toLowerCase();
@@ -43,7 +41,7 @@ class SchoolEmailValidator {
       return false;
     }
 
-    return domain.endsWith('.edu') || approvedDomains.contains(domain);
+    return true;
   }
 }
 
@@ -71,7 +69,7 @@ abstract class AuthRepository {
 
   Future<AppUser> signIn({required String email, required String password});
 
-  Future<AppUser> register({
+  Future<AuthRegistrationResult> register({
     required String displayName,
     required String email,
     required String password,
@@ -80,6 +78,16 @@ abstract class AuthRepository {
   Future<void> signOut();
 
   void dispose();
+}
+
+class AuthRegistrationResult {
+  const AuthRegistrationResult({
+    required this.user,
+    required this.requiresEmailConfirmation,
+  });
+
+  final AppUser user;
+  final bool requiresEmailConfirmation;
 }
 
 /// In-memory authentication used until a remote auth provider is connected.
@@ -122,14 +130,14 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AppUser> register({
+  Future<AuthRegistrationResult> register({
     required String displayName,
     required String email,
     required String password,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
-    if (!SchoolEmailValidator.isValid(normalizedEmail)) {
-      throw const AuthFailure('Use your .edu or approved school email.');
+    if (!EmailValidator.isValid(normalizedEmail)) {
+      throw const AuthFailure('Enter a valid email address.');
     }
     final passwordError = PasswordValidator.errorFor(password);
     if (passwordError != null) throw AuthFailure(passwordError);
@@ -144,7 +152,7 @@ class MockAuthRepository implements AuthRepository {
     );
     _accounts[normalizedEmail] = _MockAccount(user: user, password: password);
     _setUser(user);
-    return user;
+    return AuthRegistrationResult(user: user, requiresEmailConfirmation: false);
   }
 
   @override

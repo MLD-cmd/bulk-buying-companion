@@ -40,10 +40,62 @@ void main() {
 
     await expectLater(operation, completes);
   });
+
+  test('shows an email confirmation notice after registration', () async {
+    final repository = _DelayedAuthRepository();
+    final viewModel = AuthViewModel(authRepository: repository)
+      ..setMode(AuthMode.register);
+    final operation = viewModel.submit(
+      displayName: 'Jay Student',
+      email: 'student@gmail.com',
+      password: 'StrongPass1',
+    );
+    repository.registerCompleter.complete(
+      const AuthRegistrationResult(
+        user: AppUser(
+          uid: 'new-user',
+          eduEmail: 'student@gmail.com',
+          displayName: 'Jay Student',
+        ),
+        requiresEmailConfirmation: true,
+      ),
+    );
+
+    await operation;
+
+    expect(
+      viewModel.noticeMessage,
+      'Check your email to confirm your account, then log in.',
+    );
+    expect(viewModel.errorMessage, isNull);
+  });
+
+  test('clears stale notices when changing mode', () async {
+    final repository = _DelayedAuthRepository();
+    final viewModel = AuthViewModel(authRepository: repository)
+      ..setMode(AuthMode.register);
+    final operation = viewModel.submit(
+      displayName: 'Jay Student',
+      email: 'student@gmail.com',
+      password: 'StrongPass1',
+    );
+    repository.registerCompleter.complete(
+      const AuthRegistrationResult(
+        user: AppUser(uid: 'new-user', eduEmail: 'student@gmail.com'),
+        requiresEmailConfirmation: true,
+      ),
+    );
+    await operation;
+
+    viewModel.setMode(AuthMode.login);
+
+    expect(viewModel.noticeMessage, isNull);
+  });
 }
 
 class _DelayedAuthRepository implements AuthRepository {
   final completer = Completer<AppUser>();
+  final registerCompleter = Completer<AuthRegistrationResult>();
   int signInCalls = 0;
 
   @override
@@ -59,11 +111,11 @@ class _DelayedAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AppUser> register({
+  Future<AuthRegistrationResult> register({
     required String displayName,
     required String email,
     required String password,
-  }) => completer.future;
+  }) => registerCompleter.future;
 
   @override
   Future<void> signOut() async {}

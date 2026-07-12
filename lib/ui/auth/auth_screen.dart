@@ -73,8 +73,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                 const SizedBox(height: 8),
                                 Text(
                                   isRegistering
-                                      ? 'Register with your school email to start splitting smarter.'
-                                      : 'Log in with your school account to continue.',
+                                      ? 'Register with your email to start splitting smarter.'
+                                      : 'Log in with your email to continue.',
                                   textAlign: TextAlign.center,
                                   style: Theme.of(context).textTheme.bodyLarge
                                       ?.copyWith(
@@ -138,17 +138,17 @@ class _AuthScreenState extends State<AuthScreen> {
                                   textInputAction: TextInputAction.next,
                                   autofillHints: const [AutofillHints.email],
                                   decoration: const InputDecoration(
-                                    labelText: 'School email',
-                                    hintText: 'you@school.edu',
-                                    prefixIcon: Icon(Icons.school_outlined),
+                                    labelText: 'Email',
+                                    hintText: 'you@example.com',
+                                    prefixIcon: Icon(Icons.email_outlined),
                                     border: OutlineInputBorder(),
                                   ),
                                   validator: (value) {
                                     if ((value ?? '').trim().isEmpty) {
-                                      return 'Enter your school email.';
+                                      return 'Enter your email address.';
                                     }
-                                    if (!SchoolEmailValidator.isValid(value!)) {
-                                      return 'Use your .edu or approved school email.';
+                                    if (!EmailValidator.isValid(value!)) {
+                                      return 'Enter a valid email address.';
                                     }
                                     return null;
                                   },
@@ -236,6 +236,12 @@ class _AuthScreenState extends State<AuthScreen> {
                                   const SizedBox(height: 16),
                                   _ErrorBanner(
                                     message: viewModel.errorMessage!,
+                                  ),
+                                ],
+                                if (viewModel.noticeMessage != null) ...[
+                                  const SizedBox(height: 16),
+                                  _NoticeBanner(
+                                    message: viewModel.noticeMessage!,
                                   ),
                                 ],
                                 const SizedBox(height: 20),
@@ -427,6 +433,38 @@ class _ErrorBanner extends StatelessWidget {
                 message,
                 style: TextStyle(color: scheme.onErrorContainer),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoticeBanner extends StatelessWidget {
+  const _NoticeBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    const foreground = Color(0xFF173E28);
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFDCEFE3),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.mark_email_read_outlined, color: foreground),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(message, style: const TextStyle(color: foreground)),
             ),
           ],
         ),

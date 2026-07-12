@@ -2,16 +2,20 @@
 
 A Flutter application.
 
-## Getting Started
+## Supabase setup
 
-This project is a starting point for a Flutter application.
+1. Copy `.env.example` to `.env`.
+2. Add the project URL and publishable/anonymous key from your Supabase project:
 
-A few resources to get you started if this is your first Flutter project:
+   ```dotenv
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your-publishable-or-anon-key
+   ```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+3. Enable Email authentication in Supabase. Configure email confirmation to
+   match the desired signup flow.
+4. Run `flutter pub get`, then `flutter run`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The local `.env` file is ignored by Git. The Supabase publishable/anonymous key
+is intended for client applications; never place the service-role key in this
+app.

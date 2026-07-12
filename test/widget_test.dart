@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
 import 'package:bulk_buying_companion/main.dart';
+import 'package:bulk_buying_companion/models/app_user.dart';
 
 void main() {
+  Future<void> pumpApp(WidgetTester tester, {AuthRepository? repository}) {
+    return tester.pumpWidget(
+      BulkBuyingCompanionApp(
+        authRepository: repository ?? MockAuthRepository(),
+      ),
+    );
+  }
+
   Future<void> signIn(WidgetTester tester) async {
     await tester.enterText(
       find.byKey(const Key('auth-email-field')),
@@ -18,7 +28,7 @@ void main() {
   }
 
   testWidgets('app opens on the login stub', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
 
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Use demo account'), findsOneWidget);
@@ -26,7 +36,7 @@ void main() {
   });
 
   testWidgets('student can switch to registration', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
 
     await tester.tap(find.text('Register'));
     await tester.pumpAndSettle();
@@ -39,14 +49,12 @@ void main() {
     );
   });
 
-  testWidgets('login displays school email and password errors', (
-    tester,
-  ) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+  testWidgets('login displays email and password errors', (tester) async {
+    await pumpApp(tester);
 
     await tester.enterText(
       find.byKey(const Key('auth-email-field')),
-      'student@gmail.com',
+      'not-an-email',
     );
     await tester.enterText(
       find.byKey(const Key('auth-password-field')),
@@ -55,15 +63,12 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Log in'));
     await tester.pump();
 
-    expect(
-      find.text('Use your .edu or approved school email.'),
-      findsOneWidget,
-    );
+    expect(find.text('Enter a valid email address.'), findsOneWidget);
     expect(find.textContaining('at least 8 characters'), findsOneWidget);
   });
 
   testWidgets('login displays an incorrect credentials error', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
 
     await tester.enterText(
       find.byKey(const Key('auth-email-field')),
@@ -79,8 +84,8 @@ void main() {
     expect(find.text('Incorrect email or password.'), findsOneWidget);
   });
 
-  testWidgets('student can register with a school email', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+  testWidgets('student can register with any valid email', (tester) async {
+    await pumpApp(tester);
     await tester.tap(find.text('Register'));
     await tester.pumpAndSettle();
 
@@ -90,7 +95,7 @@ void main() {
     );
     await tester.enterText(
       find.byKey(const Key('auth-email-field')),
-      'jay@college.edu',
+      'jay@gmail.com',
     );
     await tester.enterText(
       find.byKey(const Key('auth-password-field')),
@@ -111,8 +116,45 @@ void main() {
     expect(find.text('Find your hub'), findsOneWidget);
   });
 
+  testWidgets('registration displays an email confirmation notice', (
+    tester,
+  ) async {
+    await pumpApp(tester, repository: _ConfirmationAuthRepository());
+    await tester.tap(find.text('Register'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('auth-name-field')),
+      'Jay Student',
+    );
+    await tester.enterText(
+      find.byKey(const Key('auth-email-field')),
+      'jay@gmail.com',
+    );
+    await tester.enterText(
+      find.byKey(const Key('auth-password-field')),
+      'StrongPass1',
+    );
+    await tester.enterText(
+      find.byKey(const Key('auth-confirm-password-field')),
+      'StrongPass1',
+    );
+    final createAccountButton = find.widgetWithText(
+      FilledButton,
+      'Create account',
+    );
+    await tester.ensureVisible(createAccountButton);
+    await tester.tap(createAccountButton);
+    await tester.pump();
+
+    expect(
+      find.text('Check your email to confirm your account, then log in.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('registration requires matching passwords', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await tester.tap(find.text('Register'));
     await tester.pumpAndSettle();
 
@@ -145,7 +187,7 @@ void main() {
   });
 
   testWidgets('Join Hub screen loads and lists hubs', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await signIn(tester);
 
     expect(find.text('Find your hub'), findsOneWidget);
@@ -153,7 +195,7 @@ void main() {
   });
 
   testWidgets('Search filters the hub list', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await signIn(tester);
 
     await tester.enterText(find.byType(TextField), 'colon');
@@ -164,7 +206,7 @@ void main() {
   });
 
   testWidgets('Joining a hub shows the current-hub banner', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await signIn(tester);
 
     await tester.tap(find.text('Join').first);
@@ -192,7 +234,7 @@ void main() {
   testWidgets('Profile screen shows the joined hub after joining', (
     tester,
   ) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await signIn(tester);
 
     await tester.tap(find.text('Join').first);
@@ -209,7 +251,7 @@ void main() {
   testWidgets('Profile screen shows empty state before joining', (
     tester,
   ) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await signIn(tester);
 
     await tester.tap(find.byIcon(Icons.person_outline));
@@ -219,7 +261,7 @@ void main() {
   });
 
   testWidgets('student can log out from profile', (tester) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await signIn(tester);
 
     await tester.tap(find.byIcon(Icons.person_outline));
@@ -230,4 +272,61 @@ void main() {
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Find your hub'), findsNothing);
   });
+
+  testWidgets('profile displays logout failures and remains open', (
+    tester,
+  ) async {
+    await pumpApp(tester, repository: _FailingSignOutRepository());
+    await signIn(tester);
+
+    await tester.tap(find.byIcon(Icons.person_outline));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log out'));
+    await tester.pump();
+
+    expect(find.text('Profile'), findsOneWidget);
+    expect(
+      find.text('Check your internet connection and try again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Welcome back'), findsNothing);
+  });
+}
+
+class _ConfirmationAuthRepository implements AuthRepository {
+  @override
+  Stream<AppUser?> get authStateChanges => const Stream.empty();
+
+  @override
+  AppUser? get currentUser => null;
+
+  @override
+  Future<AppUser> signIn({required String email, required String password}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<AuthRegistrationResult> register({
+    required String displayName,
+    required String email,
+    required String password,
+  }) async {
+    return AuthRegistrationResult(
+      user: AppUser(uid: 'pending-user', eduEmail: email),
+      requiresEmailConfirmation: true,
+    );
+  }
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  void dispose() {}
+}
+
+class _FailingSignOutRepository extends MockAuthRepository {
+  @override
+  Future<void> signOut() {
+    throw const AuthFailure('Check your internet connection and try again.');
+  }
 }

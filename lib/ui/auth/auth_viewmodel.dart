@@ -16,17 +16,20 @@ class AuthViewModel extends ChangeNotifier {
   bool _obscureConfirmation = true;
   bool _isDisposed = false;
   String? _errorMessage;
+  String? _noticeMessage;
 
   AuthMode get mode => _mode;
   bool get isSubmitting => _isSubmitting;
   bool get obscurePassword => _obscurePassword;
   bool get obscureConfirmation => _obscureConfirmation;
   String? get errorMessage => _errorMessage;
+  String? get noticeMessage => _noticeMessage;
 
   void setMode(AuthMode mode) {
     if (_isSubmitting || _mode == mode) return;
     _mode = mode;
     _errorMessage = null;
+    _noticeMessage = null;
     notifyListeners();
   }
 
@@ -48,17 +51,22 @@ class AuthViewModel extends ChangeNotifier {
     if (_isSubmitting || _isDisposed) return;
     _isSubmitting = true;
     _errorMessage = null;
+    _noticeMessage = null;
     notifyListeners();
 
     try {
       if (_mode == AuthMode.login) {
         await _authRepository.signIn(email: email, password: password);
       } else {
-        await _authRepository.register(
+        final result = await _authRepository.register(
           displayName: displayName,
           email: email,
           password: password,
         );
+        if (result.requiresEmailConfirmation && !_isDisposed) {
+          _noticeMessage =
+              'Check your email to confirm your account, then log in.';
+        }
       }
     } on AuthFailure catch (error) {
       if (!_isDisposed) _errorMessage = error.message;

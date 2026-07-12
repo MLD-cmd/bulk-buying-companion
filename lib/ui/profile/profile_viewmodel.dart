@@ -20,12 +20,35 @@ class ProfileViewModel extends ChangeNotifier {
   AppUser? _user;
   Hub? _currentHub;
   bool _isLoading = true;
+  bool _isSigningOut = false;
+  String? _errorMessage;
 
   AppUser? get user => _user;
   Hub? get currentHub => _currentHub;
   bool get isLoading => _isLoading;
+  bool get isSigningOut => _isSigningOut;
+  String? get errorMessage => _errorMessage;
 
-  Future<void> signOut() => _authRepository.signOut();
+  Future<bool> signOut() async {
+    if (_isSigningOut) return false;
+    _isSigningOut = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authRepository.signOut();
+      return true;
+    } on AuthFailure catch (error) {
+      _errorMessage = error.message;
+      return false;
+    } catch (_) {
+      _errorMessage = 'Could not log out. Please try again.';
+      return false;
+    } finally {
+      _isSigningOut = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> _load() async {
     final user = _authRepository.currentUser;

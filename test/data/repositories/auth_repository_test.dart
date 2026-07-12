@@ -2,18 +2,18 @@ import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('school email validation', () {
-    test('accepts .edu and approved school domains', () {
-      expect(SchoolEmailValidator.isValid('learner@college.edu'), isTrue);
-      expect(SchoolEmailValidator.isValid('student@usjr.edu.ph'), isTrue);
+  group('email validation', () {
+    test('accepts institutional and ordinary valid email addresses', () {
+      expect(EmailValidator.isValid('learner@college.edu'), isTrue);
+      expect(EmailValidator.isValid('student@usjr.edu.ph'), isTrue);
+      expect(EmailValidator.isValid('student@gmail.com'), isTrue);
     });
 
-    test('rejects personal and malformed email addresses', () {
-      expect(SchoolEmailValidator.isValid('student@gmail.com'), isFalse);
-      expect(SchoolEmailValidator.isValid('not-an-email'), isFalse);
-      expect(SchoolEmailValidator.isValid('first last@college.edu'), isFalse);
-      expect(SchoolEmailValidator.isValid('.@college.edu'), isFalse);
-      expect(SchoolEmailValidator.isValid('student@.edu'), isFalse);
+    test('rejects malformed email addresses', () {
+      expect(EmailValidator.isValid('not-an-email'), isFalse);
+      expect(EmailValidator.isValid('first last@college.edu'), isFalse);
+      expect(EmailValidator.isValid('.@college.edu'), isFalse);
+      expect(EmailValidator.isValid('student@.edu'), isFalse);
     });
   });
 
@@ -36,15 +36,16 @@ void main() {
     test('starts signed out and registers a student', () async {
       expect(repository.currentUser, isNull);
 
-      final user = await repository.register(
+      final result = await repository.register(
         displayName: 'Jay Student',
         email: 'jay@college.edu',
         password: 'StrongPass1',
       );
 
-      expect(user.displayName, 'Jay Student');
-      expect(user.eduEmail, 'jay@college.edu');
-      expect(repository.currentUser, same(user));
+      expect(result.user.displayName, 'Jay Student');
+      expect(result.user.eduEmail, 'jay@college.edu');
+      expect(result.requiresEmailConfirmation, isFalse);
+      expect(repository.currentUser, same(result.user));
     });
 
     test('reports invalid credentials', () async {

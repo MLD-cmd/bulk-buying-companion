@@ -81,6 +81,10 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 8),
               _CurrentHubTile(hub: viewModel.currentHub),
               const SizedBox(height: 20),
+              if (viewModel.errorMessage != null) ...[
+                _ProfileErrorBanner(message: viewModel.errorMessage!),
+                const SizedBox(height: 12),
+              ],
               ListTile(
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                 shape: RoundedRectangleBorder(
@@ -89,10 +93,19 @@ class ProfileScreen extends StatelessWidget {
                     color: Theme.of(context).colorScheme.outlineVariant,
                   ),
                 ),
-                leading: Icon(
-                  Icons.logout,
-                  color: Theme.of(context).colorScheme.error,
-                ),
+                leading: viewModel.isSigningOut
+                    ? SizedBox.square(
+                        key: const Key('logout-progress'),
+                        dimension: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      )
+                    : Icon(
+                        Icons.logout,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                 title: Text(
                   'Log out',
                   style: TextStyle(
@@ -101,11 +114,16 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
                 subtitle: const Text('Return to the student login screen'),
-                onTap: () async {
-                  await viewModel.signOut();
-                  if (!context.mounted) return;
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                },
+                onTap: viewModel.isSigningOut
+                    ? null
+                    : () async {
+                        final didSignOut = await viewModel.signOut();
+                        if (!didSignOut) return;
+                        if (!context.mounted) return;
+                        Navigator.of(
+                          context,
+                        ).popUntil((route) => route.isFirst);
+                      },
               ),
             ],
           );
@@ -121,6 +139,41 @@ class ProfileScreen extends StatelessWidget {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
+  }
+}
+
+class _ProfileErrorBanner extends StatelessWidget {
+  const _ProfileErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      container: true,
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: scheme.errorContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.error_outline, color: scheme.onErrorContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(color: scheme.onErrorContainer),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

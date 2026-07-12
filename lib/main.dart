@@ -1,28 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'config/supabase_config.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/deal_repository.dart';
 import 'data/repositories/hub_repository.dart';
+import 'data/repositories/supabase_auth_repository.dart';
 import 'models/app_user.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/hub/join_hub_screen.dart';
 import 'ui/hub/join_hub_viewmodel.dart';
 import 'ui/shared/app_theme.dart';
 
-void main() {
-  runApp(const BulkBuyingCompanionApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
+  final config = SupabaseConfig.fromEnvironment(dotenv.env);
+  await Supabase.initialize(url: config.url, publishableKey: config.anonKey);
+  final repository = SupabaseAuthRepository(
+    gateway: GoTrueSupabaseAuthGateway(Supabase.instance.client.auth),
+  );
+  runApp(BulkBuyingCompanionApp(authRepository: repository));
 }
 
 class BulkBuyingCompanionApp extends StatelessWidget {
-  const BulkBuyingCompanionApp({super.key});
+  const BulkBuyingCompanionApp({super.key, this.authRepository});
+
+  final AuthRepository? authRepository;
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         Provider<AuthRepository>(
-          create: (_) => MockAuthRepository(),
+          create: (_) => authRepository ?? MockAuthRepository(),
           dispose: (_, repository) => repository.dispose(),
         ),
         Provider<HubRepository>(create: (_) => MockHubRepository()),
