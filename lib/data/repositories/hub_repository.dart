@@ -1,3 +1,5 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/hub.dart';
 
 /// Hub data + membership contract. Backed by [MockHubRepository] until
@@ -74,4 +76,101 @@ class MockHubRepository implements HubRepository {
 
   @override
   Future<String?> getCurrentHubId(String userId) async => _membership[userId];
+}
+
+abstract class SupabaseHubGateway {
+  Future<List<Map<String, dynamic>>> getHubDirectory();
+
+  Future<void> upsertMembership({
+    required String userId,
+    required String hubId,
+  });
+
+  Future<void> deleteMembership(String userId);
+
+  Future<String?> getCurrentHubId(String userId);
+}
+
+class PostgrestSupabaseHubGateway implements SupabaseHubGateway {
+  PostgrestSupabaseHubGateway(this._client);
+
+  final SupabaseClient _client;
+
+  @override
+  Future<List<Map<String, dynamic>>> getHubDirectory() async {
+    final rows = await _client.from('hub_directory').select().order('name');
+    return List<Map<String, dynamic>>.from(rows);
+  }
+
+  @override
+  Future<void> upsertMembership({
+    required String userId,
+    required String hubId,
+  }) async {
+    await _client.from('hub_memberships').upsert({
+      'user_id': userId,
+      'hub_id': hubId,
+    }, onConflict: 'user_id');
+  }
+
+  @override
+  Future<void> deleteMembership(String userId) async {
+    await _client.from('hub_memberships').delete().eq('user_id', userId);
+  }
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async {
+    final row = await _client
+        .from('hub_memberships')
+        .select('hub_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+    return row?['hub_id'] as String?;
+  }
+}
+
+class SupabaseHubRepository implements HubRepository {
+  SupabaseHubRepository({required SupabaseHubGateway gateway})
+    : _gateway = gateway;
+
+  final SupabaseHubGateway _gateway;
+
+  @override
+  Future<List<Hub>> getHubs() async {
+    final rows = await _gateway.getHubDirectory();
+    return rows.map(_mapHub).toList();
+  }
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) {
+    return _gateway.upsertMembership(userId: userId, hubId: hubId);
+  }
+
+  @override
+  Future<void> leaveHub({required String userId}) {
+    return _gateway.deleteMembership(userId);
+  }
+
+  @override
+  Future<String?> getCurrentHubId(String userId) {
+    return _gateway.getCurrentHubId(userId);
+  }
+
+  Hub _mapHub(Map<String, dynamic> row) {
+    return Hub(
+      id: row['id'] as String,
+      name: row['name'] as String,
+      type: _mapHubType(row['type'] as String),
+      memberCount: (row['member_count'] as num?)?.toInt() ?? 0,
+      distanceLabel: row['distance_label'] as String? ?? '',
+    );
+  }
+
+  HubType _mapHubType(String value) {
+    return switch (value) {
+      'area_hub' => HubType.areaHub,
+      'dormitory' => HubType.dormitory,
+      _ => throw StateError('Unknown hub type "$value".'),
+    };
+  }
 }

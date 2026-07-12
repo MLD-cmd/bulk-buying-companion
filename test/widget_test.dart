@@ -2,14 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
+import 'package:bulk_buying_companion/data/repositories/hub_repository.dart';
 import 'package:bulk_buying_companion/main.dart';
 import 'package:bulk_buying_companion/models/app_user.dart';
 
 void main() {
-  Future<void> pumpApp(WidgetTester tester, {AuthRepository? repository}) {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    AuthRepository? repository,
+    HubRepository? hubRepository,
+  }) {
     return tester.pumpWidget(
       BulkBuyingCompanionApp(
         authRepository: repository ?? MockAuthRepository(),
+        hubRepository: hubRepository,
       ),
     );
   }
@@ -210,6 +216,30 @@ void main() {
     await signIn(tester);
 
     await tester.tap(find.text('Join').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('CURRENT HUB'), findsOneWidget);
+    expect(find.text('Joined'), findsOneWidget);
+  });
+
+  testWidgets('joined hub persists after app restart', (tester) async {
+    final authRepository = MockAuthRepository();
+    final hubRepository = MockHubRepository();
+    await pumpApp(
+      tester,
+      repository: authRepository,
+      hubRepository: hubRepository,
+    );
+    await signIn(tester);
+
+    await tester.tap(find.text('Join').first);
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpApp(
+      tester,
+      repository: authRepository,
+      hubRepository: hubRepository,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('CURRENT HUB'), findsOneWidget);

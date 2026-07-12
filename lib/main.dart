@@ -19,16 +19,30 @@ Future<void> main() async {
   await dotenv.load(fileName: '.env');
   final config = SupabaseConfig.fromEnvironment(dotenv.env);
   await Supabase.initialize(url: config.url, publishableKey: config.anonKey);
+  final client = Supabase.instance.client;
   final repository = SupabaseAuthRepository(
-    gateway: GoTrueSupabaseAuthGateway(Supabase.instance.client.auth),
+    gateway: GoTrueSupabaseAuthGateway(client.auth),
   );
-  runApp(BulkBuyingCompanionApp(authRepository: repository));
+  final hubRepository = SupabaseHubRepository(
+    gateway: PostgrestSupabaseHubGateway(client),
+  );
+  runApp(
+    BulkBuyingCompanionApp(
+      authRepository: repository,
+      hubRepository: hubRepository,
+    ),
+  );
 }
 
 class BulkBuyingCompanionApp extends StatelessWidget {
-  const BulkBuyingCompanionApp({super.key, this.authRepository});
+  const BulkBuyingCompanionApp({
+    super.key,
+    this.authRepository,
+    this.hubRepository,
+  });
 
   final AuthRepository? authRepository;
+  final HubRepository? hubRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +52,9 @@ class BulkBuyingCompanionApp extends StatelessWidget {
           create: (_) => authRepository ?? MockAuthRepository(),
           dispose: (_, repository) => repository.dispose(),
         ),
-        Provider<HubRepository>(create: (_) => MockHubRepository()),
+        Provider<HubRepository>(
+          create: (_) => hubRepository ?? MockHubRepository(),
+        ),
         Provider<DealRepository>(create: (_) => MockDealRepository()),
         ChangeNotifierProvider<JoinHubViewModel>(
           create: (context) => JoinHubViewModel(
