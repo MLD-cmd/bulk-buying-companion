@@ -7,8 +7,8 @@ void main() {
   test('loads the deals for its hub on construction', () async {
     final repository = _FakeDealRepository({
       'colon': const [
-        Deal(id: 'a', hubId: 'colon', title: 'Rice Sack'),
-        Deal(id: 'b', hubId: 'colon', title: 'Water Case'),
+        _StubDeal(id: 'a', title: 'Rice Sack'),
+        _StubDeal(id: 'b', title: 'Water Case'),
       ],
     });
     final viewModel = SplitBoardViewModel(
@@ -40,7 +40,7 @@ void main() {
 
   test('refresh re-fetches the hub deals', () async {
     final repository = _FakeDealRepository({
-      'colon': const [Deal(id: 'a', hubId: 'colon', title: 'Rice Sack')],
+      'colon': const [_StubDeal(id: 'a', title: 'Rice Sack')],
     });
     final viewModel = SplitBoardViewModel(
       dealRepository: repository,
@@ -56,10 +56,9 @@ void main() {
   });
 
   test('flags an error when loading fails, then recovers on refresh', () async {
-    final repository = _FakeDealRepository(
-      {'colon': const [Deal(id: 'a', hubId: 'colon', title: 'Rice Sack')]},
-      failFirstCall: true,
-    );
+    final repository = _FakeDealRepository({
+      'colon': const [_StubDeal(id: 'a', title: 'Rice Sack')],
+    }, failFirstCall: true);
     final viewModel = SplitBoardViewModel(
       dealRepository: repository,
       hubId: 'colon',
@@ -75,6 +74,18 @@ void main() {
     expect(viewModel.hasError, isFalse);
     expect(viewModel.deals, hasLength(1));
   });
+}
+
+class _StubDeal extends Deal {
+  const _StubDeal({required super.id, required super.title})
+    : super(
+        hubId: 'colon',
+        priceLabel: 'P100/share',
+        availableSlots: 1,
+        totalSlots: 4,
+        pickupLocation: 'Campus Gate',
+        status: DealStatus.open,
+      );
 }
 
 class _FakeDealRepository implements DealRepository {
