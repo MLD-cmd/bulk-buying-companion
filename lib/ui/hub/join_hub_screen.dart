@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../profile/profile_screen.dart';
+import '../split_board/split_board_screen.dart';
 import 'join_hub_viewmodel.dart';
 import 'widgets/hub_card.dart';
 
@@ -34,6 +35,9 @@ class JoinHubScreen extends StatelessWidget {
                   _CurrentHubBanner(
                     hubName: viewModel.joinedHub!.name,
                     onLeave: viewModel.leave,
+                    onOpenSplitBoard: () => Navigator.of(context).push(
+                      SplitBoardScreen.route(viewModel.joinedHub!.id),
+                    ),
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -84,10 +88,15 @@ class _SearchField extends StatelessWidget {
 }
 
 class _CurrentHubBanner extends StatelessWidget {
-  const _CurrentHubBanner({required this.hubName, required this.onLeave});
+  const _CurrentHubBanner({
+    required this.hubName,
+    required this.onLeave,
+    required this.onOpenSplitBoard,
+  });
 
   final String hubName;
   final VoidCallback onLeave;
+  final VoidCallback onOpenSplitBoard;
 
   @override
   Widget build(BuildContext context) {
@@ -127,6 +136,19 @@ class _CurrentHubBanner extends StatelessWidget {
               ],
             ),
           ),
+          TextButton(
+            onPressed: onOpenSplitBoard,
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF173E28),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 0),
+            ),
+            child: const Text(
+              'View deals',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(width: 4),
           TextButton(
             onPressed: onLeave,
             style: TextButton.styleFrom(
