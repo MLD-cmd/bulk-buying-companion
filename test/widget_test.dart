@@ -1,30 +1,61 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bulk_buying_companion/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Join Hub screen loads and lists hubs', (tester) async {
+    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.text('Find your hub'), findsOneWidget);
+    expect(find.text('Magallanes Residence'), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('Search filters the hub list', (tester) async {
+    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'colon');
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Colon Street Hub'), findsOneWidget);
+    expect(find.text('Magallanes Residence'), findsNothing);
+  });
+
+  testWidgets('Joining a hub shows the current-hub banner', (tester) async {
+    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Join').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('CURRENT HUB'), findsOneWidget);
+    expect(find.text('Joined'), findsOneWidget);
+  });
+
+  testWidgets('Profile screen shows the joined hub after joining', (tester) async {
+    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Join').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.person_outline));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Magallanes Residence'), findsOneWidget);
+    expect(find.textContaining("haven't joined"), findsNothing);
+  });
+
+  testWidgets('Profile screen shows empty state before joining', (tester) async {
+    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.person_outline));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining("haven't joined"), findsOneWidget);
   });
 }
