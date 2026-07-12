@@ -36,11 +36,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('app opens on the login stub', (tester) async {
+  testWidgets('app opens on the login screen', (tester) async {
     await pumpApp(tester);
 
     expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('Use demo account'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Log in'), findsOneWidget);
     expect(find.text('Find your hub'), findsNothing);
   });
 

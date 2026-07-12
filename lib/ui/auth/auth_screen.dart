@@ -272,18 +272,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                               : 'Log in',
                                         ),
                                 ),
-                                if (!isRegistering) ...[
-                                  const SizedBox(height: 8),
-                                  TextButton.icon(
-                                    onPressed: () {
-                                      _emailController.text =
-                                          'student@usjr.edu.ph';
-                                      _passwordController.text = 'Student123';
-                                    },
-                                    icon: const Icon(Icons.bolt_outlined),
-                                    label: const Text('Use demo account'),
-                                  ),
-                                ],
                               ],
                             ),
                           ),
