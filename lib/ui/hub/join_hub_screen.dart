@@ -36,7 +36,10 @@ class JoinHubScreen extends StatelessWidget {
                     hubName: viewModel.joinedHub!.name,
                     onLeave: viewModel.leave,
                     onOpenSplitBoard: () => Navigator.of(context).push(
-                      SplitBoardScreen.route(viewModel.joinedHub!.id),
+                      SplitBoardScreen.route(
+                        viewModel.joinedHub!.id,
+                        viewModel.joinedHub!.name,
+                      ),
                     ),
                   ),
                 Padding(

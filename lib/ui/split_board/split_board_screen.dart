@@ -10,12 +10,13 @@ class SplitBoardScreen extends StatelessWidget {
 
   final String hubId;
 
-  static Route<void> route(String hubId) {
+  static Route<void> route(String hubId, String hubName) {
     return MaterialPageRoute(
       builder: (context) => ChangeNotifierProvider(
         create: (context) => SplitBoardViewModel(
           dealRepository: context.read<DealRepository>(),
           hubId: hubId,
+          hubName: hubName,
         ),
         child: SplitBoardScreen(hubId: hubId),
       ),
@@ -25,7 +26,23 @@ class SplitBoardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Split Board')),
+      appBar: AppBar(
+        title: Consumer<SplitBoardViewModel>(
+          builder: (context, viewModel, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Split Board'),
+              Text(
+                viewModel.hubName,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Consumer<SplitBoardViewModel>(
           builder: (context, viewModel, _) {
@@ -35,9 +52,11 @@ class SplitBoardScreen extends StatelessWidget {
 
             return RefreshIndicator(
               onRefresh: viewModel.refresh,
-              child: viewModel.deals.isEmpty
-                  ? const _EmptyState()
-                  : _DealList(viewModel: viewModel),
+              child: viewModel.hasError
+                  ? const _ErrorState()
+                  : viewModel.deals.isEmpty
+                      ? const _EmptyState()
+                      : _DealList(viewModel: viewModel),
             );
           },
         ),
@@ -69,10 +88,45 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return const _CenteredMessage(
+      icon: Icons.inventory_2_outlined,
+      title: 'No deals yet in this hub',
+      message: 'Be the first to post a bulk-buy deal for your hub.',
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _CenteredMessage(
+      icon: Icons.cloud_off_outlined,
+      title: "Couldn't load deals",
+      message: 'Pull down to try again.',
+    );
+  }
+}
+
+/// Full-height centered message used for the empty and error states. Wrapped
+/// in a scroll view so pull-to-refresh still works when there is no list to
+/// scroll (RefreshIndicator needs a scrollable child).
+class _CenteredMessage extends StatelessWidget {
+  const _CenteredMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // Wrapped in a scroll view so pull-to-refresh still works when the
-    // list is empty (RefreshIndicator needs a scrollable child).
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
@@ -86,20 +140,20 @@ class _EmptyState extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.inventory_2_outlined,
+                      icon,
                       size: 40,
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'No deals yet in this hub',
+                      title,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.titleSmall
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Be the first to post a bulk-buy deal for your hub.',
+                      message,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
