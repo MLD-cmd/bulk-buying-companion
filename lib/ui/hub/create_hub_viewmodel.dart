@@ -1,0 +1,159 @@
+import 'package:flutter/foundation.dart';
+
+import '../../data/repositories/hub_repository.dart';
+import '../../data/services/location_service.dart';
+import '../../models/hub.dart';
+import '../../utils/geo.dart';
+
+/// Two hubs closer together than this are assumed to be the same place
+/// registered twice — a dormitory and the area hub around it are never
+/// realistically this close on a campus.
+const double kDuplicateHubRadiusMeters = 100;
+
+class CreateHubViewModel extends ChangeNotifier {
+  CreateHubViewModel({
+    required HubRepository hubRepository,
+    required LocationService locationService,
+  }) : _hubRepository = hubRepository,
+       _locationService = locationService {
+    _loadExistingHubs();
+  }
+
+  final HubRepository _hubRepository;
+  final LocationService _locationService;
+
+  List<Hub> _existingHubs = const [];
+  bool _isLocating = false;
+  bool _isSubmitting = false;
+  String? _locationError;
+  String? _errorMessage;
+  Coordinates? _capturedLocation;
+
+  List<Hub> get existingHubs => _existingHubs;
+  bool get isLocating => _isLocating;
+  bool get isSubmitting => _isSubmitting;
+  String? get locationError => _locationError;
+  String? get errorMessage => _errorMessage;
+
+  /// Set when "Use my current location" succeeds, so the screen can push the
+  /// values into its coordinate fields. The student can still edit them.
+  Coordinates? get capturedLocation => _capturedLocation;
+
+  Future<void> _loadExistingHubs() async {
+    try {
+      _existingHubs = await _hubRepository.getHubs();
+    } catch (_) {
+      // A failed directory load only weakens duplicate detection; it must not
+      // block registration. The database's primary key is the real guard.
+      _existingHubs = const [];
+    }
+    notifyListeners();
+  }
+
+  String? validateName(String? value) {
+    final name = (value ?? '').trim();
+    if (name.isEmpty) return 'Enter the hub name.';
+    if (name.length < 3) return 'Hub name is too short.';
+    if (hubSlug(name).isEmpty) return 'Hub name needs at least one letter.';
+    return null;
+  }
+
+  String? validateLatitude(String? value) =>
+      _validateCoordinate(value, label: 'Latitude', limit: 90);
+
+  String? validateLongitude(String? value) =>
+      _validateCoordinate(value, label: 'Longitude', limit: 180);
+
+  String? _validateCoordinate(
+    String? value, {
+    required String label,
+    required double limit,
+  }) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Enter a ${label.toLowerCase()}.';
+    final parsed = double.tryParse(text);
+    if (parsed == null) return '$label must be a number.';
+    if (parsed < -limit || parsed > limit) {
+      return '$label must be between -$limit and $limit.';
+    }
+    return null;
+  }
+
+  /// Subtask 4: reject a hub that already exists, either by name or by sitting
+  /// on top of one that is already registered. Returns null when the draft is
+  /// safe to save.
+  String? duplicateErrorFor(HubDraft draft) {
+    final slug = hubSlug(draft.name);
+
+    for (final hub in _existingHubs) {
+      if (hubSlug(hub.name) == slug) {
+        return 'A hub named "${hub.name}" is already registered.';
+      }
+    }
+
+    for (final hub in _existingHubs) {
+      if (!hub.hasCoordinates) continue;
+      final meters = haversineMeters(
+        startLatitude: draft.latitude,
+        startLongitude: draft.longitude,
+        endLatitude: hub.latitude!,
+        endLongitude: hub.longitude!,
+      );
+      if (meters <= kDuplicateHubRadiusMeters) {
+        return '"${hub.name}" is already registered about '
+            '${meters.round()} m from here.';
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> useMyLocation() async {
+    if (_isLocating) return;
+    _isLocating = true;
+    _locationError = null;
+    notifyListeners();
+
+    try {
+      _capturedLocation = await _locationService.getCurrentPosition();
+    } on LocationFailure catch (error) {
+      _locationError = error.message;
+    } catch (_) {
+      _locationError =
+          'Could not read your location. Enter the coordinates below instead.';
+    } finally {
+      _isLocating = false;
+      notifyListeners();
+    }
+  }
+
+  /// Returns the registered hub, or null when the draft was rejected. The
+  /// reason is exposed on [errorMessage].
+  Future<Hub?> submit(HubDraft draft) async {
+    if (_isSubmitting) return null;
+
+    final duplicate = duplicateErrorFor(draft);
+    if (duplicate != null) {
+      _errorMessage = duplicate;
+      notifyListeners();
+      return null;
+    }
+
+    _isSubmitting = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      return await _hubRepository.createHub(draft);
+    } on HubFailure catch (error) {
+      _errorMessage = error.message;
+      return null;
+    } catch (_) {
+      _errorMessage = 'Could not register the hub. Please try again.';
+      return null;
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
+    }
+  }
+}

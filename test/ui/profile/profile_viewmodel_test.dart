@@ -130,6 +130,11 @@ class _EmptyHubRepository implements HubRepository {
   Future<List<Hub>> getHubs() async => const [];
 
   @override
+  Future<Hub> createHub(HubDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> joinHub({required String userId, required String hubId}) async {}
 
   @override
@@ -144,6 +149,11 @@ class _FailingHubRepository implements HubRepository {
 
   @override
   Future<List<Hub>> getHubs() {
+    throw StateError('hub table unavailable');
+  }
+
+  @override
+  Future<Hub> createHub(HubDraft draft) {
     throw StateError('hub table unavailable');
   }
 

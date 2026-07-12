@@ -2,11 +2,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/hub.dart';
 
-/// Hub data + membership contract. Backed by [MockHubRepository] until
-/// the real backend (Supabase) is wired; the ViewModel never depends on
-/// the concrete implementation.
+/// Hub data + membership contract. Backed by [MockHubRepository] in tests and
+/// [SupabaseHubRepository] in production; the ViewModel never depends on the
+/// concrete implementation.
 abstract class HubRepository {
   Future<List<Hub>> getHubs();
+
+  Future<Hub> createHub(HubDraft draft);
 
   Future<void> joinHub({required String userId, required String hubId});
 
@@ -15,54 +17,89 @@ abstract class HubRepository {
   Future<String?> getCurrentHubId(String userId);
 }
 
-/// In-memory stand-in. Data is stubbed — the hub names below are
-/// placeholders (real streets near USJR, invented establishment names),
-/// not verified real boarding houses.
+/// Raised when a hub cannot be registered. The message is user-facing.
+class HubFailure implements Exception {
+  const HubFailure(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// In-memory stand-in. Data is stubbed — the hub names below are placeholders
+/// (real streets near USJR, invented establishment names), and the coordinates
+/// are approximate points around the campus, not surveyed locations.
 class MockHubRepository implements HubRepository {
   MockHubRepository()
-      : _hubs = const [
-          Hub(
-            id: 'magallanes',
-            name: 'Magallanes Residence',
-            type: HubType.dormitory,
-            memberCount: 24,
-            distanceLabel: '150 m',
-          ),
-          Hub(
-            id: 'burgos',
-            name: 'P. Burgos Boarding House',
-            type: HubType.dormitory,
-            memberCount: 18,
-            distanceLabel: '300 m',
-          ),
-          Hub(
-            id: 'colon',
-            name: 'Colon Street Hub',
-            type: HubType.areaHub,
-            memberCount: 31,
-            distanceLabel: '400 m',
-          ),
-          Hub(
-            id: 'sanciangko',
-            name: 'Sanciangko Apartments',
-            type: HubType.dormitory,
-            memberCount: 12,
-            distanceLabel: '600 m',
-          ),
-          Hub(
-            id: 'junquera',
-            name: 'Junquera Area Hub',
-            type: HubType.areaHub,
-            memberCount: 9,
-            distanceLabel: '850 m',
-          ),
-        ];
+    : _hubs = [
+        const Hub(
+          id: 'magallanes',
+          name: 'Magallanes Residence',
+          type: HubType.dormitory,
+          memberCount: 24,
+          distanceLabel: '150 m',
+          latitude: 10.2954,
+          longitude: 123.8969,
+        ),
+        const Hub(
+          id: 'burgos',
+          name: 'P. Burgos Boarding House',
+          type: HubType.dormitory,
+          memberCount: 18,
+          distanceLabel: '300 m',
+          latitude: 10.2963,
+          longitude: 123.8951,
+        ),
+        const Hub(
+          id: 'colon',
+          name: 'Colon Street Hub',
+          type: HubType.areaHub,
+          memberCount: 31,
+          distanceLabel: '400 m',
+          latitude: 10.2967,
+          longitude: 123.8988,
+        ),
+        const Hub(
+          id: 'sanciangko',
+          name: 'Sanciangko Apartments',
+          type: HubType.dormitory,
+          memberCount: 12,
+          distanceLabel: '600 m',
+          latitude: 10.2939,
+          longitude: 123.8949,
+        ),
+        const Hub(
+          id: 'junquera',
+          name: 'Junquera Area Hub',
+          type: HubType.areaHub,
+          memberCount: 9,
+          distanceLabel: '850 m',
+          latitude: 10.2975,
+          longitude: 123.8939,
+        ),
+      ];
 
   final List<Hub> _hubs;
   final Map<String, String> _membership = {};
 
   @override
-  Future<List<Hub>> getHubs() async => _hubs;
+  Future<List<Hub>> getHubs() async => List.unmodifiable(_hubs);
+
+  @override
+  Future<Hub> createHub(HubDraft draft) async {
+    final hub = Hub(
+      id: hubSlug(draft.name),
+      name: draft.name.trim(),
+      type: draft.type,
+      memberCount: 0,
+      distanceLabel: '',
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+    );
+    _hubs.add(hub);
+    return hub;
+  }
 
   @override
   Future<void> joinHub({required String userId, required String hubId}) async {
@@ -80,6 +117,8 @@ class MockHubRepository implements HubRepository {
 
 abstract class SupabaseHubGateway {
   Future<List<Map<String, dynamic>>> getHubDirectory();
+
+  Future<Map<String, dynamic>> insertHub(Map<String, dynamic> values);
 
   Future<void> upsertMembership({
     required String userId,
@@ -100,6 +139,12 @@ class PostgrestSupabaseHubGateway implements SupabaseHubGateway {
   Future<List<Map<String, dynamic>>> getHubDirectory() async {
     final rows = await _client.from('hub_directory').select().order('name');
     return List<Map<String, dynamic>>.from(rows);
+  }
+
+  @override
+  Future<Map<String, dynamic>> insertHub(Map<String, dynamic> values) async {
+    final row = await _client.from('hubs').insert(values).select().single();
+    return Map<String, dynamic>.from(row);
   }
 
   @override
@@ -142,6 +187,24 @@ class SupabaseHubRepository implements HubRepository {
   }
 
   @override
+  Future<Hub> createHub(HubDraft draft) async {
+    try {
+      final row = await _gateway.insertHub({
+        'id': hubSlug(draft.name),
+        'name': draft.name.trim(),
+        'type': _hubTypeValue(draft.type),
+        'latitude': draft.latitude,
+        'longitude': draft.longitude,
+      });
+      // The insert returns the `hubs` row, which has no member_count column;
+      // a hub nobody has joined yet has zero members by definition.
+      return _mapHub({...row, 'member_count': 0});
+    } on PostgrestException catch (error) {
+      throw HubFailure(_messageFor(error));
+    }
+  }
+
+  @override
   Future<void> joinHub({required String userId, required String hubId}) {
     return _gateway.upsertMembership(userId: userId, hubId: hubId);
   }
@@ -156,6 +219,18 @@ class SupabaseHubRepository implements HubRepository {
     return _gateway.getCurrentHubId(userId);
   }
 
+  String _messageFor(PostgrestException error) {
+    // 23505 = unique_violation: another student registered this hub first.
+    if (error.code == '23505') {
+      return 'That hub is already registered.';
+    }
+    // 42501 = insufficient_privilege, i.e. the insert policy rejected us.
+    if (error.code == '42501') {
+      return 'You do not have permission to register a hub.';
+    }
+    return 'Could not register the hub. Please try again.';
+  }
+
   Hub _mapHub(Map<String, dynamic> row) {
     return Hub(
       id: row['id'] as String,
@@ -163,6 +238,8 @@ class SupabaseHubRepository implements HubRepository {
       type: _mapHubType(row['type'] as String),
       memberCount: (row['member_count'] as num?)?.toInt() ?? 0,
       distanceLabel: row['distance_label'] as String? ?? '',
+      latitude: (row['latitude'] as num?)?.toDouble(),
+      longitude: (row['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -171,6 +248,13 @@ class SupabaseHubRepository implements HubRepository {
       'area_hub' => HubType.areaHub,
       'dormitory' => HubType.dormitory,
       _ => throw StateError('Unknown hub type "$value".'),
+    };
+  }
+
+  String _hubTypeValue(HubType type) {
+    return switch (type) {
+      HubType.areaHub => 'area_hub',
+      HubType.dormitory => 'dormitory',
     };
   }
 }

@@ -77,6 +77,13 @@ class JoinHubViewModel extends ChangeNotifier {
     }
   }
 
+  /// Re-reads the hub directory, e.g. after the student registers a new hub.
+  Future<void> refresh() async {
+    final userId = _authRepository.currentUser?.uid;
+    if (userId == null) return;
+    await _load(userId);
+  }
+
   void setSearchQuery(String query) {
     _searchQuery = query;
     notifyListeners();
