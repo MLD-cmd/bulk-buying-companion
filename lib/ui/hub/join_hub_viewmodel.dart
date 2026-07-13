@@ -9,6 +9,11 @@ import '../../models/app_user.dart';
 import '../../models/hub.dart';
 import '../../utils/geo.dart';
 
+/// Hubs further than this from the student are hidden while the "Nearby only"
+/// filter is on. Campus-scale: far enough to cover the surrounding barangays,
+/// tight enough that a hub across the city drops off the list.
+const double kNearbyRadiusMeters = 2000;
+
 class JoinHubViewModel extends ChangeNotifier {
   JoinHubViewModel({
     required AuthRepository authRepository,
@@ -33,11 +38,27 @@ class JoinHubViewModel extends ChangeNotifier {
   String? _pendingSwitchId;
   String? _locationFailureMessage;
   bool _isLoading = true;
+  bool _nearbyOnly = false;
 
   List<Hub> get filteredHubs {
+    var hubs = _hubs;
+
+    if (_nearbyOnly) {
+      // A hub with no coordinates cannot be proven to be out of range, so it
+      // stays on the list rather than disappearing on a filter it never met.
+      hubs = hubs
+          .where(
+            (hub) =>
+                hub.distanceMeters == null ||
+                hub.distanceMeters! <= kNearbyRadiusMeters,
+          )
+          .toList();
+    }
+
     final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return _hubs;
-    return _hubs.where((hub) {
+    if (query.isEmpty) return hubs;
+
+    return hubs.where((hub) {
       return hub.name.toLowerCase().contains(query) ||
           hub.type.name.toLowerCase().contains(query);
     }).toList();
@@ -48,6 +69,18 @@ class JoinHubViewModel extends ChangeNotifier {
   String? get pendingSwitchId => _pendingSwitchId;
   bool get isLoading => _isLoading;
   String? get locationFailureMessage => _locationFailureMessage;
+  bool get nearbyOnly => _nearbyOnly;
+
+  /// Without a location fix every distance is null, so the filter would have
+  /// nothing to act on — the UI hides the control instead of offering a no-op.
+  bool get canFilterByDistance =>
+      _hubs.any((hub) => hub.distanceMeters != null);
+
+  void setNearbyOnly(bool value) {
+    if (_nearbyOnly == value) return;
+    _nearbyOnly = value;
+    notifyListeners();
+  }
 
   Hub? get joinedHub {
     if (_joinedHubId == null) return null;
@@ -92,30 +125,40 @@ class JoinHubViewModel extends ChangeNotifier {
     try {
       final coordinates = await _locationService.getCurrentPosition();
       _locationFailureMessage = null;
-      _hubs = _hubs.map((hub) {
-        if (!hub.hasCoordinates) return hub;
-        final meters = haversineMeters(
-          startLatitude: coordinates.latitude,
-          startLongitude: coordinates.longitude,
-          endLatitude: hub.latitude!,
-          endLongitude: hub.longitude!,
-        );
-        return Hub(
-          id: hub.id,
-          name: hub.name,
-          type: hub.type,
-          memberCount: hub.memberCount,
-          distanceLabel: _formatDistance(meters),
-          latitude: hub.latitude,
-          longitude: hub.longitude,
-        );
-      }).toList();
+      _hubs = _sortedByDistance(
+        _hubs.map((hub) {
+          if (!hub.hasCoordinates) return hub;
+          final meters = haversineMeters(
+            startLatitude: coordinates.latitude,
+            startLongitude: coordinates.longitude,
+            endLatitude: hub.latitude!,
+            endLongitude: hub.longitude!,
+          );
+          return hub.copyWith(
+            distanceLabel: _formatDistance(meters),
+            distanceMeters: meters,
+          );
+        }).toList(),
+      );
     } on LocationFailure catch (failure) {
       _locationFailureMessage = failure.message;
+      _nearbyOnly = false;
     } catch (_) {
       _locationFailureMessage =
           'Could not read your current location. Showing saved distances.';
+      _nearbyOnly = false;
     }
+  }
+
+  /// Nearest first. Hubs with no coordinates have no distance to sort on, so
+  /// they keep their directory order at the end of the list instead of being
+  /// treated as infinitely far away.
+  List<Hub> _sortedByDistance(List<Hub> hubs) {
+    final measured = hubs.where((hub) => hub.distanceMeters != null).toList()
+      ..sort((a, b) => a.distanceMeters!.compareTo(b.distanceMeters!));
+    final unmeasured = hubs.where((hub) => hub.distanceMeters == null);
+
+    return [...measured, ...unmeasured];
   }
 
   /// Re-reads the hub directory, e.g. after the student registers a new hub.

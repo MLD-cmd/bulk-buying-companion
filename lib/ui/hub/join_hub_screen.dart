@@ -49,15 +49,31 @@ class JoinHubScreen extends StatelessWidget {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                   child: _SearchField(
                     query: viewModel.searchQuery,
                     onChanged: viewModel.setSearchQuery,
                   ),
                 ),
-                Expanded(
-                  child: _HubList(viewModel: viewModel),
-                ),
+                if (viewModel.canFilterByDistance)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: FilterChip(
+                        key: const Key('hub-nearby-filter'),
+                        avatar: const Icon(Icons.near_me_outlined, size: 18),
+                        label: Text(
+                          'Within ${(kNearbyRadiusMeters / 1000).round()} km',
+                        ),
+                        selected: viewModel.nearbyOnly,
+                        onSelected: viewModel.setNearbyOnly,
+                      ),
+                    ),
+                  )
+                else if (viewModel.locationFailureMessage != null)
+                  _LocationNotice(message: viewModel.locationFailureMessage!),
+                Expanded(child: _HubList(viewModel: viewModel)),
               ],
             );
           },
@@ -192,6 +208,39 @@ class _CurrentHubBanner extends StatelessWidget {
   }
 }
 
+class _LocationNotice extends StatelessWidget {
+  const _LocationNotice({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          Icon(
+            Icons.location_off_outlined,
+            size: 16,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _HubList extends StatelessWidget {
   const _HubList({required this.viewModel});
 
@@ -202,7 +251,10 @@ class _HubList extends StatelessWidget {
     final hubs = viewModel.filteredHubs;
 
     if (hubs.isEmpty) {
-      return _EmptyState(query: viewModel.searchQuery);
+      return _EmptyState(
+        query: viewModel.searchQuery,
+        nearbyOnly: viewModel.nearbyOnly,
+      );
     }
 
     return ListView.separated(
@@ -231,13 +283,36 @@ class _HubList extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.query});
+  const _EmptyState({required this.query, required this.nearbyOnly});
 
   final String query;
+  final bool nearbyOnly;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasQuery = query.trim().isNotEmpty;
+
+    final radiusKm = (kNearbyRadiusMeters / 1000).round();
+
+    final String title;
+    final String hint;
+    if (hasQuery) {
+      title = 'No hubs match "$query"';
+      hint = nearbyOnly
+          ? 'Nothing within $radiusKm km matches. Check the spelling, or turn '
+                'off the distance filter.'
+          : 'Check the spelling, or ask your RA to get your hub added.';
+    } else if (nearbyOnly) {
+      title = 'No hubs nearby';
+      hint =
+          'Nothing is within $radiusKm km of you. Turn off the distance filter '
+          'to see every hub.';
+    } else {
+      title = 'No hubs yet';
+      hint = 'Register a hub to get your building on the list.';
+    }
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -245,23 +320,27 @@ class _EmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.inventory_2_outlined,
+              nearbyOnly && !hasQuery
+                  ? Icons.near_me_disabled_outlined
+                  : Icons.inventory_2_outlined,
               size: 40,
               color: theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 10),
             Text(
-              'No hubs match "$query"',
+              title,
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
-              'Check the spelling, or ask your RA to get your hub added.',
+              hint,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),

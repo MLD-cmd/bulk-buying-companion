@@ -9,6 +9,7 @@ class Hub {
     required this.distanceLabel,
     this.latitude,
     this.longitude,
+    this.distanceMeters,
   });
 
   final String id;
@@ -22,7 +23,25 @@ class Hub {
   final double? latitude;
   final double? longitude;
 
+  /// Straight-line distance from the student's current position. Null until the
+  /// device location has been read, and for any hub without coordinates —
+  /// [distanceLabel] still holds the seeded text in that case.
+  final double? distanceMeters;
+
   bool get hasCoordinates => latitude != null && longitude != null;
+
+  Hub copyWith({String? distanceLabel, double? distanceMeters}) {
+    return Hub(
+      id: id,
+      name: name,
+      type: type,
+      memberCount: memberCount,
+      distanceLabel: distanceLabel ?? this.distanceLabel,
+      latitude: latitude,
+      longitude: longitude,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+    );
+  }
 }
 
 /// A hub the student is about to register, before the backend assigns it an id.

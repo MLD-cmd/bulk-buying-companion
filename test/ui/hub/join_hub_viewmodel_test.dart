@@ -82,6 +82,88 @@ void main() {
     },
   );
 
+  test('sorts hubs nearest first and keeps unmeasurable hubs last', () async {
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: _HubRepositoryWithDirectory(hubs: _unsortedDirectory),
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+
+    expect(viewModel.filteredHubs.map((hub) => hub.id), [
+      'near',
+      'north',
+      'far',
+      'unknown',
+    ]);
+  });
+
+  test('drops hubs beyond the radius when the nearby filter is on', () async {
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: _HubRepositoryWithDirectory(hubs: _unsortedDirectory),
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+    expect(viewModel.canFilterByDistance, isTrue);
+
+    viewModel.setNearbyOnly(true);
+
+    // 'far' sits ~6 km out, past kNearbyRadiusMeters. 'unknown' has no
+    // coordinates, so it cannot be ruled out and stays on the list.
+    expect(viewModel.filteredHubs.map((hub) => hub.id), [
+      'near',
+      'north',
+      'unknown',
+    ]);
+  });
+
+  test('combines the nearby filter with the search query', () async {
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: _HubRepositoryWithDirectory(hubs: _unsortedDirectory),
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+
+    viewModel.setNearbyOnly(true);
+    viewModel.setSearchQuery('hub');
+
+    expect(viewModel.filteredHubs.map((hub) => hub.id), [
+      'near',
+      'north',
+      'unknown',
+    ]);
+
+    viewModel.setSearchQuery('far');
+    expect(viewModel.filteredHubs, isEmpty);
+  });
+
+  test('offers no distance filter without a location fix', () async {
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: _HubRepositoryWithDirectory(hubs: _unsortedDirectory),
+      locationService: _FakeLocationService(
+        failure: const LocationFailure('Location permission denied.'),
+      ),
+    );
+
+    await pumpEventQueue();
+
+    expect(viewModel.canFilterByDistance, isFalse);
+    expect(viewModel.nearbyOnly, isFalse);
+    expect(viewModel.filteredHubs, hasLength(4));
+  });
+
   test('stops loading when hub data fails to load', () async {
     final viewModel = JoinHubViewModel(
       authRepository: _SignedInAuthRepository(),
@@ -97,6 +179,46 @@ void main() {
     expect(viewModel.filteredHubs, isEmpty);
   });
 }
+
+/// Deliberately not in distance order, so a passing sort test cannot be the
+/// directory order leaking through. Distances from 10.2954 / 123.8969:
+/// near 0 m, north ~100 m, far ~6 km, unknown unmeasurable.
+const _unsortedDirectory = [
+  Hub(
+    id: 'far',
+    name: 'Far Hub',
+    type: HubType.areaHub,
+    memberCount: 4,
+    distanceLabel: '1 m',
+    latitude: 10.3500,
+    longitude: 123.8969,
+  ),
+  Hub(
+    id: 'north',
+    name: 'North Hub',
+    type: HubType.areaHub,
+    memberCount: 7,
+    distanceLabel: '888 m',
+    latitude: 10.2963,
+    longitude: 123.8969,
+  ),
+  Hub(
+    id: 'near',
+    name: 'Near Hub',
+    type: HubType.dormitory,
+    memberCount: 3,
+    distanceLabel: '999 m',
+    latitude: 10.2954,
+    longitude: 123.8969,
+  ),
+  Hub(
+    id: 'unknown',
+    name: 'Unknown Hub',
+    type: HubType.dormitory,
+    memberCount: 1,
+    distanceLabel: 'Distance unavailable',
+  ),
+];
 
 class _SignedInAuthRepository implements AuthRepository {
   @override

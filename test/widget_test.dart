@@ -6,6 +6,7 @@ import 'package:bulk_buying_companion/data/repositories/hub_repository.dart';
 import 'package:bulk_buying_companion/data/services/location_service.dart';
 import 'package:bulk_buying_companion/main.dart';
 import 'package:bulk_buying_companion/models/app_user.dart';
+import 'package:bulk_buying_companion/ui/hub/widgets/hub_card.dart';
 
 void main() {
   Future<void> pumpApp(
@@ -21,6 +22,18 @@ void main() {
         locationService: locationService ?? const _StubLocationService(),
       ),
     );
+  }
+
+  /// Taps Join on a named hub. The list is sorted by distance, so the card at
+  /// a given position depends on where [_StubLocationService] puts the student
+  /// — a test that cares which hub it joined has to say so.
+  Future<void> joinHubNamed(WidgetTester tester, String name) async {
+    final card = find.ancestor(
+      of: find.text(name),
+      matching: find.byType(HubCard),
+    );
+    await tester.tap(find.descendant(of: card, matching: find.text('Join')));
+    await tester.pumpAndSettle();
   }
 
   Future<void> signIn(WidgetTester tester) async {
@@ -214,6 +227,43 @@ void main() {
     expect(find.text('Magallanes Residence'), findsNothing);
   });
 
+  testWidgets('hub list is sorted nearest first', (tester) async {
+    await pumpApp(tester);
+    await signIn(tester);
+
+    final names = tester
+        .widgetList<HubCard>(find.byType(HubCard))
+        .map((card) => card.hub.name)
+        .toList();
+
+    // Colon Street Hub is the closest seeded hub to _StubLocationService;
+    // Magallanes Residence is first in the directory but not the nearest.
+    expect(names.first, 'Colon Street Hub');
+    expect(
+      names.indexOf('Colon Street Hub'),
+      lessThan(names.indexOf('Magallanes Residence')),
+    );
+  });
+
+  testWidgets('the radius filter hides hubs beyond it', (tester) async {
+    await pumpApp(tester);
+    await signIn(tester);
+
+    expect(find.byType(HubCard), findsNWidgets(5));
+
+    await tester.tap(find.byKey(const Key('hub-nearby-filter')));
+    await tester.pumpAndSettle();
+
+    // Every seeded hub sits ~3 km from the stub position, past the 2 km radius.
+    expect(find.byType(HubCard), findsNothing);
+    expect(find.text('No hubs nearby'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('hub-nearby-filter')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HubCard), findsNWidgets(5));
+  });
+
   testWidgets('Joining a hub shows the current-hub banner', (tester) async {
     await pumpApp(tester);
     await signIn(tester);
@@ -255,8 +305,7 @@ void main() {
     await pumpApp(tester);
     await signIn(tester);
 
-    await tester.tap(find.text('Join').first);
-    await tester.pumpAndSettle();
+    await joinHubNamed(tester, 'Magallanes Residence');
     await tester.tap(find.text('View deals'));
     await tester.pumpAndSettle();
 
@@ -334,8 +383,7 @@ void main() {
     await pumpApp(tester);
     await signIn(tester);
 
-    await tester.tap(find.text('Join').first);
-    await tester.pumpAndSettle();
+    await joinHubNamed(tester, 'Magallanes Residence');
 
     await tester.tap(find.byIcon(Icons.person_outline));
     await tester.pumpAndSettle();
