@@ -59,7 +59,10 @@ void main() {
       expect(viewModel.validateName(''), 'Enter the hub name.');
       expect(viewModel.validateName('  '), 'Enter the hub name.');
       expect(viewModel.validateName('Hi'), 'Hub name is too short.');
-      expect(viewModel.validateName('!!!!'), 'Hub name needs at least one letter.');
+      expect(
+        viewModel.validateName('!!!!'),
+        'Hub name needs at least one letter.',
+      );
       expect(viewModel.validateName('Colon Street Hub'), isNull);
     });
 
@@ -83,36 +86,54 @@ void main() {
   });
 
   group('duplicate detection', () {
-    test('rejects a hub whose name already exists, ignoring case and spacing',
-        () async {
-      final viewModel = await _viewModel();
+    test(
+      'rejects a hub whose name already exists, ignoring case and spacing',
+      () async {
+        final viewModel = await _viewModel();
 
-      final error = viewModel.duplicateErrorFor(
-        _draft(name: '  magallanes   residence '),
-      );
+        final error = viewModel.duplicateErrorFor(
+          _draft(name: '  magallanes   residence '),
+        );
 
-      expect(error, 'A hub named "Magallanes Residence" is already registered.');
-    });
+        expect(
+          error,
+          'A hub named "Magallanes Residence" is already registered.',
+        );
+      },
+    );
 
-    test('rejects a differently-named hub sitting on top of an existing one',
-        () async {
-      final viewModel = await _viewModel();
+    test(
+      'rejects a differently-named hub sitting on top of an existing one',
+      () async {
+        final viewModel = await _viewModel();
 
-      // ~11 m away from Magallanes Residence: same building, new name.
-      final error = viewModel.duplicateErrorFor(
-        _draft(name: 'Magallanes Dorm Annex', latitude: 10.2955, longitude: 123.8969),
-      );
+        // ~11 m away from Magallanes Residence: same building, new name.
+        final error = viewModel.duplicateErrorFor(
+          _draft(
+            name: 'Magallanes Dorm Annex',
+            latitude: 10.2955,
+            longitude: 123.8969,
+          ),
+        );
 
-      expect(error, contains('"Magallanes Residence" is already registered about'));
-      expect(error, contains('m from here'));
-    });
+        expect(
+          error,
+          contains('"Magallanes Residence" is already registered about'),
+        );
+        expect(error, contains('m from here'));
+      },
+    );
 
     test('accepts a hub that is far enough away', () async {
       final viewModel = await _viewModel();
 
       // ~250 m north of Magallanes: a genuinely different place.
       final error = viewModel.duplicateErrorFor(
-        _draft(name: 'Colon Street Hub', latitude: 10.2977, longitude: 123.8969),
+        _draft(
+          name: 'Colon Street Hub',
+          latitude: 10.2977,
+          longitude: 123.8969,
+        ),
       );
 
       expect(error, isNull);
@@ -141,20 +162,22 @@ void main() {
       expect(viewModel.isLocating, isFalse);
     });
 
-    test('surfaces a permission failure without blocking manual entry',
-        () async {
-      final viewModel = await _viewModel(
-        locationService: _FakeLocationService(
-          failure: const LocationFailure('Location permission denied.'),
-        ),
-      );
+    test(
+      'surfaces a permission failure without blocking manual entry',
+      () async {
+        final viewModel = await _viewModel(
+          locationService: _FakeLocationService(
+            failure: const LocationFailure('Location permission denied.'),
+          ),
+        );
 
-      await viewModel.useMyLocation();
+        await viewModel.useMyLocation();
 
-      expect(viewModel.locationError, 'Location permission denied.');
-      expect(viewModel.capturedLocation, isNull);
-      expect(viewModel.isLocating, isFalse);
-    });
+        expect(viewModel.locationError, 'Location permission denied.');
+        expect(viewModel.capturedLocation, isNull);
+        expect(viewModel.isLocating, isFalse);
+      },
+    );
   });
 
   group('submit', () {

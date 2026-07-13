@@ -137,19 +137,19 @@ void main() {
           _StubDeal(
             id: 'a',
             title: 'Rice Sack',
-            priceLabel: 'P1,200/share',
+            totalPrice: 4800, // P1,200/share
             closesAt: DateTime(2026, 7, 14),
           ),
           _StubDeal(
             id: 'b',
             title: 'Water Case',
-            priceLabel: 'P95/share',
+            totalPrice: 380, // P95/share
             closesAt: DateTime(2026, 7, 16),
           ),
           _StubDeal(
             id: 'c',
             title: 'Coffee Pack',
-            priceLabel: 'P150/share',
+            totalPrice: 600, // P150/share
             closesAt: DateTime(2026, 7, 15),
           ),
         ],
@@ -177,16 +177,19 @@ void main() {
   });
 }
 
+/// Every stub splits 4 ways, so totalPrice / 4 is the per-share price the
+/// board sorts and renders: 400 -> 'P100/share'.
 class _StubDeal extends Deal {
   const _StubDeal({
     required super.id,
     required super.title,
     super.category = DealCategory.grocery,
-    super.priceLabel = 'P100/share',
+    super.totalPrice = 400,
     super.status = DealStatus.open,
     super.closesAt,
   }) : super(
          hubId: 'colon',
+         quantity: 1,
          availableSlots: 1,
          totalSlots: 4,
          pickupLocation: 'Campus Gate',
@@ -207,5 +210,10 @@ class _FakeDealRepository implements DealRepository {
       throw Exception('network error');
     }
     return _dealsByHub[hubId] ?? const [];
+  }
+
+  @override
+  Future<Deal> createDeal(DealDraft draft) {
+    throw UnimplementedError();
   }
 }

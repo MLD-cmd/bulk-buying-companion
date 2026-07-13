@@ -40,7 +40,9 @@ class _StubDeal extends Deal {
   const _StubDeal({required super.id, required super.title})
     : super(
         hubId: 'colon',
-        priceLabel: 'P100/share',
+        // P400 over 4 slots renders as 'P100/share'.
+        totalPrice: 400,
+        quantity: 1,
         category: DealCategory.grocery,
         availableSlots: 1,
         totalSlots: 4,
@@ -56,4 +58,9 @@ class _FakeDealRepository implements DealRepository {
 
   @override
   Future<List<Deal>> getDeals(String hubId) async => _deals;
+
+  @override
+  Future<Deal> createDeal(DealDraft draft) {
+    throw UnimplementedError();
+  }
 }

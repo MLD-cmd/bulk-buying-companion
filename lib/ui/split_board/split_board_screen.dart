@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/deal_repository.dart';
 import '../../models/deal.dart';
+import 'create_deal_screen.dart';
 import 'split_board_viewmodel.dart';
 import 'widgets/deal_card.dart';
 
@@ -62,8 +63,34 @@ class SplitBoardScreen extends StatelessWidget {
           },
         ),
       ),
+      floatingActionButton: Consumer<SplitBoardViewModel>(
+        builder: (context, viewModel, _) => FloatingActionButton.extended(
+          key: const Key('post-deal-button'),
+          onPressed: () => _postDeal(context, hubId, viewModel),
+          icon: const Icon(Icons.add),
+          label: const Text('Post a deal'),
+        ),
+      ),
     );
   }
+}
+
+Future<void> _postDeal(
+  BuildContext context,
+  String hubId,
+  SplitBoardViewModel viewModel,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+
+  final deal = await Navigator.of(
+    context,
+  ).push(CreateDealScreen.route(hubId, viewModel.hubName));
+  if (deal == null) return;
+
+  await viewModel.refresh();
+  messenger.showSnackBar(
+    SnackBar(content: Text('${deal.title} is now on the Split Board.')),
+  );
 }
 
 class _DealList extends StatelessWidget {
