@@ -13,7 +13,9 @@ void main() {
               id: 'rice',
               hubId: 'colon',
               title: '25kg Rice Sack',
-              priceLabel: 'P180/share',
+              // P900 over 5 slots is the 'P180/share' the card should render.
+              totalPrice: 900,
+              quantity: 1,
               category: DealCategory.grocery,
               availableSlots: 3,
               totalSlots: 5,

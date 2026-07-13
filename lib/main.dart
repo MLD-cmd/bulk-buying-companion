@@ -27,10 +27,16 @@ Future<void> main() async {
   final hubRepository = SupabaseHubRepository(
     gateway: PostgrestSupabaseHubGateway(client),
   );
+  final dealRepository = SupabaseDealRepository(
+    gateway: PostgrestSupabaseDealGateway(client),
+    // Read lazily: the student is not signed in yet when the app boots.
+    currentUserId: () => client.auth.currentUser!.id,
+  );
   runApp(
     BulkBuyingCompanionApp(
       authRepository: repository,
       hubRepository: hubRepository,
+      dealRepository: dealRepository,
     ),
   );
 }
@@ -40,11 +46,13 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     super.key,
     this.authRepository,
     this.hubRepository,
+    this.dealRepository,
     this.locationService,
   });
 
   final AuthRepository? authRepository;
   final HubRepository? hubRepository;
+  final DealRepository? dealRepository;
   final LocationService? locationService;
 
   @override
@@ -58,7 +66,9 @@ class BulkBuyingCompanionApp extends StatelessWidget {
         Provider<HubRepository>(
           create: (_) => hubRepository ?? MockHubRepository(),
         ),
-        Provider<DealRepository>(create: (_) => MockDealRepository()),
+        Provider<DealRepository>(
+          create: (_) => dealRepository ?? MockDealRepository(),
+        ),
         Provider<LocationService>(
           create: (_) => locationService ?? const GeolocatorLocationService(),
         ),
