@@ -66,6 +66,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
           create: (context) => JoinHubViewModel(
             authRepository: context.read<AuthRepository>(),
             hubRepository: context.read<HubRepository>(),
+            locationService: context.read<LocationService>(),
           ),
         ),
       ],

@@ -18,7 +18,7 @@ void main() {
       BulkBuyingCompanionApp(
         authRepository: repository ?? MockAuthRepository(),
         hubRepository: hubRepository,
-        locationService: locationService,
+        locationService: locationService ?? const _StubLocationService(),
       ),
     );
   }
@@ -252,7 +252,7 @@ void main() {
   testWidgets('Split Board opens from the hub banner and lists deals', (
     tester,
   ) async {
-    await tester.pumpWidget(const BulkBuyingCompanionApp());
+    await pumpApp(tester);
     await signIn(tester);
 
     await tester.tap(find.text('Join').first);

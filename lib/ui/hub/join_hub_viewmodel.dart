@@ -4,15 +4,19 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/hub_repository.dart';
+import '../../data/services/location_service.dart';
 import '../../models/app_user.dart';
 import '../../models/hub.dart';
+import '../../utils/geo.dart';
 
 class JoinHubViewModel extends ChangeNotifier {
   JoinHubViewModel({
     required AuthRepository authRepository,
     required HubRepository hubRepository,
+    required LocationService locationService,
   }) : _authRepository = authRepository,
-       _hubRepository = hubRepository {
+       _hubRepository = hubRepository,
+       _locationService = locationService {
     _authSub = _authRepository.authStateChanges.listen(_onAuthChanged);
     final currentUser = _authRepository.currentUser;
     if (currentUser != null) _load(currentUser.uid);
@@ -20,12 +24,14 @@ class JoinHubViewModel extends ChangeNotifier {
 
   final AuthRepository _authRepository;
   final HubRepository _hubRepository;
+  final LocationService _locationService;
   late final StreamSubscription<AppUser?> _authSub;
 
   List<Hub> _hubs = [];
   String _searchQuery = '';
   String? _joinedHubId;
   String? _pendingSwitchId;
+  String? _locationFailureMessage;
   bool _isLoading = true;
 
   List<Hub> get filteredHubs {
@@ -41,6 +47,7 @@ class JoinHubViewModel extends ChangeNotifier {
   String? get joinedHubId => _joinedHubId;
   String? get pendingSwitchId => _pendingSwitchId;
   bool get isLoading => _isLoading;
+  String? get locationFailureMessage => _locationFailureMessage;
 
   Hub? get joinedHub {
     if (_joinedHubId == null) return null;
@@ -67,13 +74,47 @@ class JoinHubViewModel extends ChangeNotifier {
 
       _hubs = results[0] as List<Hub>;
       _joinedHubId = results[1] as String?;
+      await _replaceDistancesWithCurrentLocation();
     } catch (_) {
       _hubs = const [];
       _joinedHubId = null;
       _pendingSwitchId = null;
+      _locationFailureMessage = null;
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _replaceDistancesWithCurrentLocation() async {
+    if (!_hubs.any((hub) => hub.hasCoordinates)) return;
+
+    try {
+      final coordinates = await _locationService.getCurrentPosition();
+      _locationFailureMessage = null;
+      _hubs = _hubs.map((hub) {
+        if (!hub.hasCoordinates) return hub;
+        final meters = haversineMeters(
+          startLatitude: coordinates.latitude,
+          startLongitude: coordinates.longitude,
+          endLatitude: hub.latitude!,
+          endLongitude: hub.longitude!,
+        );
+        return Hub(
+          id: hub.id,
+          name: hub.name,
+          type: hub.type,
+          memberCount: hub.memberCount,
+          distanceLabel: _formatDistance(meters),
+          latitude: hub.latitude,
+          longitude: hub.longitude,
+        );
+      }).toList();
+    } on LocationFailure catch (failure) {
+      _locationFailureMessage = failure.message;
+    } catch (_) {
+      _locationFailureMessage =
+          'Could not read your current location. Showing saved distances.';
     }
   }
 
@@ -131,4 +172,12 @@ class JoinHubViewModel extends ChangeNotifier {
     _authSub.cancel();
     super.dispose();
   }
+}
+
+String _formatDistance(double meters) {
+  if (meters < 1000) return '${meters.round()} m';
+
+  final kilometers = meters / 1000;
+  if (kilometers < 10) return '${kilometers.toStringAsFixed(1)} km';
+  return '${kilometers.round()} km';
 }
