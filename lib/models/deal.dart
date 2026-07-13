@@ -13,11 +13,26 @@ class Deal {
     required this.status,
     this.description,
     this.closesAt,
+    this.createdBy,
+    this.hostName,
   });
 
   final String id;
   final String hubId;
   final String title;
+
+  /// The student organising the buy. [createdBy] is null on the deals seeded
+  /// into the mock; [hostName] comes from the deal_feed view and stays null
+  /// when the host has no profile row, or on the Deal returned straight from
+  /// an insert (that row is the raw deals table, which has no host_name).
+  final String? createdBy;
+  final String? hostName;
+
+  /// What to call the host when their name is unknown, rather than leaving a
+  /// gap where a person should be.
+  String get hostLabel => hostName?.trim().isNotEmpty == true
+      ? hostName!.trim()
+      : 'A student in this hub';
 
   /// Optional detail the poster adds: brand, size, where they are buying it.
   final String? description;

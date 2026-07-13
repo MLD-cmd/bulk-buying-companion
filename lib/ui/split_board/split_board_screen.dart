@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../data/repositories/deal_repository.dart';
 import '../../models/deal.dart';
 import 'create_deal_screen.dart';
+import 'deal_details_screen.dart';
 import 'split_board_viewmodel.dart';
 import 'widgets/deal_card.dart';
 
@@ -111,7 +112,13 @@ class _DealList extends StatelessWidget {
           const _NoMatchingDealsState()
         else
           for (final deal in deals) ...[
-            DealCard(deal: deal),
+            InkWell(
+              key: Key('deal-card-${deal.id}'),
+              onTap: () =>
+                  Navigator.of(context).push(DealDetailsScreen.route(deal)),
+              borderRadius: BorderRadius.circular(8),
+              child: DealCard(deal: deal),
+            ),
             const SizedBox(height: 10),
           ],
       ],

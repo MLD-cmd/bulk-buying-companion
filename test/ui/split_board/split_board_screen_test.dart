@@ -34,6 +34,37 @@ void main() {
     expect(find.text('Rice Sack'), findsOneWidget);
     expect(find.text('Water Case'), findsNothing);
   });
+
+  testWidgets('tapping a deal opens its details', (tester) async {
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository(const [
+        _StubDeal(id: 'rice', title: 'Rice Sack'),
+      ]),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: viewModel,
+        child: const MaterialApp(home: SplitBoardScreen(hubId: 'colon')),
+      ),
+    );
+    await tester.pump();
+
+    await _openDetails(tester, 'rice');
+
+    expect(find.text('Deal details'), findsOneWidget);
+    expect(find.byKey(const Key('detail-cost-per-slot')), findsOneWidget);
+    expect(find.byKey(const Key('detail-host-name')), findsOneWidget);
+    expect(find.byKey(const Key('detail-reserve-button')), findsOneWidget);
+  });
+}
+
+/// The board is the only way into the details screen, so the tap has to work.
+Future<void> _openDetails(WidgetTester tester, String dealId) async {
+  await tester.tap(find.byKey(Key('deal-card-$dealId')));
+  await tester.pumpAndSettle();
 }
 
 class _StubDeal extends Deal {
