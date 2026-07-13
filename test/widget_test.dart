@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/hub_repository.dart';
+import 'package:bulk_buying_companion/data/services/location_service.dart';
 import 'package:bulk_buying_companion/main.dart';
 import 'package:bulk_buying_companion/models/app_user.dart';
 
@@ -11,11 +12,13 @@ void main() {
     WidgetTester tester, {
     AuthRepository? repository,
     HubRepository? hubRepository,
+    LocationService? locationService,
   }) {
     return tester.pumpWidget(
       BulkBuyingCompanionApp(
         authRepository: repository ?? MockAuthRepository(),
         hubRepository: hubRepository,
+        locationService: locationService,
       ),
     );
   }
@@ -33,11 +36,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('app opens on the login stub', (tester) async {
+  testWidgets('app opens on the login screen', (tester) async {
     await pumpApp(tester);
 
     expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('Use demo account'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Log in'), findsOneWidget);
     expect(find.text('Find your hub'), findsNothing);
   });
 
@@ -261,6 +264,70 @@ void main() {
     expect(find.text('Egg Tray (30s) — Split 3 ways'), findsOneWidget);
   });
 
+  testWidgets('student registers a hub and it lands on the hub list', (
+    tester,
+  ) async {
+    await pumpApp(tester, locationService: const _StubLocationService());
+    await signIn(tester);
+
+    expect(find.text('Escario Heights'), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.add_location_alt_outlined));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('hub-name-field')),
+      'Escario Heights',
+    );
+    // Fill the coordinates from the device instead of typing them.
+    await tester.tap(find.byKey(const Key('hub-use-location-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextFormField>(find.byKey(const Key('hub-latitude-field'))),
+      isNotNull,
+    );
+
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+
+    // Back on Find your hub, with the new hub in the directory.
+    expect(find.text('Find your hub'), findsOneWidget);
+    expect(find.text('Escario Heights'), findsOneWidget);
+  });
+
+  testWidgets('registering a hub that already exists is refused', (
+    tester,
+  ) async {
+    await pumpApp(tester, locationService: const _StubLocationService());
+    await signIn(tester);
+
+    await tester.tap(find.byIcon(Icons.add_location_alt_outlined));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('hub-name-field')),
+      'Colon Street Hub',
+    );
+    await tester.enterText(
+      find.byKey(const Key('hub-latitude-field')),
+      '10.3200',
+    );
+    await tester.enterText(
+      find.byKey(const Key('hub-longitude-field')),
+      '123.9100',
+    );
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+
+    // Still on the form, with the reason shown.
+    expect(find.text('Register a hub'), findsOneWidget);
+    expect(
+      find.text('A hub named "Colon Street Hub" is already registered.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Profile screen shows the joined hub after joining', (
     tester,
   ) async {
@@ -321,6 +388,16 @@ void main() {
     );
     expect(find.text('Welcome back'), findsNothing);
   });
+}
+
+class _StubLocationService implements LocationService {
+  const _StubLocationService();
+
+  @override
+  Future<Coordinates> getCurrentPosition() async {
+    // Somewhere clear of every seeded mock hub.
+    return const Coordinates(latitude: 10.3200, longitude: 123.9100);
+  }
 }
 
 class _ConfirmationAuthRepository implements AuthRepository {

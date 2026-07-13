@@ -8,6 +8,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/deal_repository.dart';
 import 'data/repositories/hub_repository.dart';
 import 'data/repositories/supabase_auth_repository.dart';
+import 'data/services/location_service.dart';
 import 'models/app_user.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/hub/join_hub_screen.dart';
@@ -39,10 +40,12 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     super.key,
     this.authRepository,
     this.hubRepository,
+    this.locationService,
   });
 
   final AuthRepository? authRepository;
   final HubRepository? hubRepository;
+  final LocationService? locationService;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +59,9 @@ class BulkBuyingCompanionApp extends StatelessWidget {
           create: (_) => hubRepository ?? MockHubRepository(),
         ),
         Provider<DealRepository>(create: (_) => MockDealRepository()),
+        Provider<LocationService>(
+          create: (_) => locationService ?? const GeolocatorLocationService(),
+        ),
         ChangeNotifierProvider<JoinHubViewModel>(
           create: (context) => JoinHubViewModel(
             authRepository: context.read<AuthRepository>(),

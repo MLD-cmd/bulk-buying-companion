@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../profile/profile_screen.dart';
 import '../split_board/split_board_screen.dart';
+import 'create_hub_screen.dart';
 import 'join_hub_viewmodel.dart';
 import 'widgets/hub_card.dart';
 
@@ -15,6 +16,11 @@ class JoinHubScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Find your hub'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_location_alt_outlined),
+            tooltip: 'Register a hub',
+            onPressed: () => _registerHub(context),
+          ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             tooltip: 'Profile',
@@ -59,6 +65,19 @@ class JoinHubScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _registerHub(BuildContext context) async {
+  final viewModel = context.read<JoinHubViewModel>();
+  final messenger = ScaffoldMessenger.of(context);
+
+  final hub = await Navigator.of(context).push(CreateHubScreen.route());
+  if (hub == null) return;
+
+  await viewModel.refresh();
+  messenger.showSnackBar(
+    SnackBar(content: Text('${hub.name} is now on the hub list.')),
+  );
 }
 
 class _SearchField extends StatelessWidget {

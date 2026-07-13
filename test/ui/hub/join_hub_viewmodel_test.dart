@@ -57,6 +57,11 @@ class _FailingHubRepository implements HubRepository {
   }
 
   @override
+  Future<Hub> createHub(HubDraft draft) {
+    throw StateError('hub table unavailable');
+  }
+
+  @override
   Future<String?> getCurrentHubId(String userId) {
     throw StateError('membership table unavailable');
   }
