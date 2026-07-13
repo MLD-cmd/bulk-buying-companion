@@ -80,6 +80,14 @@ class DealCard extends StatelessWidget {
                 icon: Icons.group_outlined,
                 label: deal.availableSlotsLabel,
               ),
+              _InfoChip(
+                icon: Icons.category_outlined,
+                label: deal.category.label,
+              ),
+              _InfoChip(
+                icon: Icons.schedule_outlined,
+                label: deal.deadlineLabel,
+              ),
               _InfoChip(icon: Icons.place_outlined, label: deal.pickupLocation),
             ],
           ),

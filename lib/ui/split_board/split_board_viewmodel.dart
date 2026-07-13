@@ -10,8 +10,8 @@ class SplitBoardViewModel extends ChangeNotifier {
     required DealRepository dealRepository,
     required String hubId,
     required this.hubName,
-  })  : _dealRepository = dealRepository,
-        _hubId = hubId {
+  }) : _dealRepository = dealRepository,
+       _hubId = hubId {
     _load();
   }
 
@@ -24,10 +24,45 @@ class SplitBoardViewModel extends ChangeNotifier {
   List<Deal> _deals = [];
   bool _isLoading = true;
   bool _hasError = false;
+  String _searchQuery = '';
+  DealCategory? _categoryFilter;
+  DealStatus? _statusFilter;
+  DealSortOption _sortOption = DealSortOption.deadline;
 
   List<Deal> get deals => _deals;
+  List<Deal> get filteredDeals {
+    final normalizedQuery = _searchQuery.trim().toLowerCase();
+    final matchingDeals = _deals.where((deal) {
+      final matchesSearch =
+          normalizedQuery.isEmpty ||
+          deal.title.toLowerCase().contains(normalizedQuery);
+      final matchesCategory =
+          _categoryFilter == null || deal.category == _categoryFilter;
+      final matchesStatus =
+          _statusFilter == null || deal.status == _statusFilter;
+      return matchesSearch && matchesCategory && matchesStatus;
+    }).toList();
+
+    matchingDeals.sort((a, b) {
+      return switch (_sortOption) {
+        DealSortOption.deadline => _compareDeadlines(a, b),
+        DealSortOption.price => _priceValue(a).compareTo(_priceValue(b)),
+      };
+    });
+
+    return matchingDeals;
+  }
+
   bool get isLoading => _isLoading;
   bool get hasError => _hasError;
+  String get searchQuery => _searchQuery;
+  DealCategory? get categoryFilter => _categoryFilter;
+  DealStatus? get statusFilter => _statusFilter;
+  DealSortOption get sortOption => _sortOption;
+  bool get hasActiveFilters =>
+      _searchQuery.trim().isNotEmpty ||
+      _categoryFilter != null ||
+      _statusFilter != null;
 
   Future<void> _load() async {
     _isLoading = true;
@@ -54,4 +89,76 @@ class SplitBoardViewModel extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  void updateSearchQuery(String query) {
+    if (_searchQuery == query) {
+      return;
+    }
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void updateCategoryFilter(DealCategory? category) {
+    if (_categoryFilter == category) {
+      return;
+    }
+    _categoryFilter = category;
+    notifyListeners();
+  }
+
+  void updateStatusFilter(DealStatus? status) {
+    if (_statusFilter == status) {
+      return;
+    }
+    _statusFilter = status;
+    notifyListeners();
+  }
+
+  void updateSortOption(DealSortOption option) {
+    if (_sortOption == option) {
+      return;
+    }
+    _sortOption = option;
+    notifyListeners();
+  }
+
+  void clearFilters() {
+    if (!hasActiveFilters) {
+      return;
+    }
+    _searchQuery = '';
+    _categoryFilter = null;
+    _statusFilter = null;
+    notifyListeners();
+  }
+
+  int _compareDeadlines(Deal a, Deal b) {
+    final aDeadline = a.closesAt;
+    final bDeadline = b.closesAt;
+    if (aDeadline == null && bDeadline == null) {
+      return 0;
+    }
+    if (aDeadline == null) {
+      return 1;
+    }
+    if (bDeadline == null) {
+      return -1;
+    }
+    return aDeadline.compareTo(bDeadline);
+  }
+
+  double _priceValue(Deal deal) {
+    final match = RegExp(r'\d[\d,]*(?:\.\d+)?').firstMatch(deal.priceLabel);
+    final normalizedPrice = match?.group(0)?.replaceAll(',', '') ?? '';
+    return double.tryParse(normalizedPrice) ?? double.infinity;
+  }
+}
+
+enum DealSortOption {
+  deadline('Deadline'),
+  price('Price');
+
+  const DealSortOption(this.label);
+
+  final String label;
 }

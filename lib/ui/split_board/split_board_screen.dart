@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/deal_repository.dart';
+import '../../models/deal.dart';
 import 'split_board_viewmodel.dart';
 import 'widgets/deal_card.dart';
 
@@ -36,8 +37,8 @@ class SplitBoardScreen extends StatelessWidget {
               Text(
                 viewModel.hubName,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -55,8 +56,8 @@ class SplitBoardScreen extends StatelessWidget {
               child: viewModel.hasError
                   ? const _ErrorState()
                   : viewModel.deals.isEmpty
-                      ? const _EmptyState()
-                      : _DealList(viewModel: viewModel),
+                  ? const _EmptyState()
+                  : _DealList(viewModel: viewModel),
             );
           },
         ),
@@ -72,13 +73,259 @@ class _DealList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deals = viewModel.deals;
+    final deals = viewModel.filteredDeals;
 
-    return ListView.separated(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-      itemCount: deals.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
-      itemBuilder: (context, index) => DealCard(deal: deals[index]),
+      children: [
+        _DealFilterBar(viewModel: viewModel),
+        const SizedBox(height: 12),
+        if (deals.isEmpty)
+          const _NoMatchingDealsState()
+        else
+          for (final deal in deals) ...[
+            DealCard(deal: deal),
+            const SizedBox(height: 10),
+          ],
+      ],
+    );
+  }
+}
+
+class _DealFilterBar extends StatefulWidget {
+  const _DealFilterBar({required this.viewModel});
+
+  final SplitBoardViewModel viewModel;
+
+  @override
+  State<_DealFilterBar> createState() => _DealFilterBarState();
+}
+
+class _DealFilterBarState extends State<_DealFilterBar> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(
+      text: widget.viewModel.searchQuery,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _DealFilterBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_searchController.text != widget.viewModel.searchQuery) {
+      _searchController.text = widget.viewModel.searchQuery;
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final viewModel = widget.viewModel;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              onChanged: viewModel.updateSearchQuery,
+              textInputAction: TextInputAction.search,
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                labelText: 'Search by product name',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _HubFilterChip(hubName: viewModel.hubName),
+                _FilterDropdown<DealCategory?>(
+                  width: 164,
+                  label: 'Category',
+                  icon: Icons.category_outlined,
+                  value: viewModel.categoryFilter,
+                  items: [
+                    const DropdownMenuItem<DealCategory?>(
+                      value: null,
+                      child: Text('All categories'),
+                    ),
+                    for (final category in DealCategory.values)
+                      DropdownMenuItem<DealCategory?>(
+                        value: category,
+                        child: Text(category.label),
+                      ),
+                  ],
+                  onChanged: viewModel.updateCategoryFilter,
+                ),
+                _FilterDropdown<DealStatus?>(
+                  width: 154,
+                  label: 'Status',
+                  icon: Icons.fact_check_outlined,
+                  value: viewModel.statusFilter,
+                  items: [
+                    const DropdownMenuItem<DealStatus?>(
+                      value: null,
+                      child: Text('All statuses'),
+                    ),
+                    for (final status in DealStatus.values)
+                      DropdownMenuItem<DealStatus?>(
+                        value: status,
+                        child: Text(status.label),
+                      ),
+                  ],
+                  onChanged: viewModel.updateStatusFilter,
+                ),
+                _FilterDropdown<DealSortOption>(
+                  width: 148,
+                  label: 'Sort',
+                  icon: Icons.sort_outlined,
+                  value: viewModel.sortOption,
+                  items: [
+                    for (final option in DealSortOption.values)
+                      DropdownMenuItem<DealSortOption>(
+                        value: option,
+                        child: Text(option.label),
+                      ),
+                  ],
+                  onChanged: (option) {
+                    if (option != null) {
+                      viewModel.updateSortOption(option);
+                    }
+                  },
+                ),
+                if (viewModel.hasActiveFilters)
+                  TextButton.icon(
+                    onPressed: viewModel.clearFilters,
+                    icon: const Icon(Icons.close),
+                    label: const Text('Clear'),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HubFilterChip extends StatelessWidget {
+  const _HubFilterChip({required this.hubName});
+
+  final String hubName;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SizedBox(
+      width: 180,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          prefixIcon: Icon(Icons.hub_outlined),
+          labelText: 'Hub',
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+        child: Text(
+          hubName,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyMedium,
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterDropdown<T> extends StatelessWidget {
+  const _FilterDropdown({
+    required this.width,
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final double width;
+  final String label;
+  final IconData icon;
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: DropdownButtonFormField<T>(
+        value: value,
+        items: items,
+        onChanged: onChanged,
+        isExpanded: true,
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon),
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+        ),
+      ),
+    );
+  }
+}
+
+class _NoMatchingDealsState extends StatelessWidget {
+  const _NoMatchingDealsState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 12),
+      child: Column(
+        children: [
+          Icon(
+            Icons.search_off_outlined,
+            size: 36,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'No matching deals',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Adjust the search or filters to see more bulk-buy deals.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -148,8 +395,9 @@ class _CenteredMessage extends StatelessWidget {
                     Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(

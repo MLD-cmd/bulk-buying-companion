@@ -14,6 +14,7 @@ void main() {
               hubId: 'colon',
               title: '25kg Rice Sack',
               priceLabel: 'P180/share',
+              category: DealCategory.grocery,
               availableSlots: 3,
               totalSlots: 5,
               pickupLocation: 'USJR Main Gate',
