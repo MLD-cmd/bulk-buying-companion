@@ -29,6 +29,7 @@ class MockDealRepository implements DealRepository {
         'colon': [
           Deal(
             id: 'colon-rice',
+            hostName: 'Marco Villanueva',
             hubId: 'colon',
             title: '25kg Rice Sack — Split 5 ways',
             totalPrice: 900,
@@ -42,6 +43,7 @@ class MockDealRepository implements DealRepository {
           ),
           Deal(
             id: 'colon-water',
+            hostName: 'Bea Alonzo',
             hubId: 'colon',
             title: 'Bottled Water Case (24pk)',
             totalPrice: 380,
@@ -55,6 +57,7 @@ class MockDealRepository implements DealRepository {
           ),
           Deal(
             id: 'colon-detergent',
+            hostName: 'Rey Mercado',
             hubId: 'colon',
             title: 'Laundry Detergent 6L',
             totalPrice: 360,
@@ -70,6 +73,7 @@ class MockDealRepository implements DealRepository {
         'magallanes': [
           Deal(
             id: 'magallanes-eggs',
+            hostName: 'Trina Lopez',
             hubId: 'magallanes',
             title: 'Egg Tray (30s) — Split 3 ways',
             totalPrice: 255,
@@ -83,6 +87,7 @@ class MockDealRepository implements DealRepository {
           ),
           Deal(
             id: 'magallanes-coffee',
+            hostName: 'Karl Diaz',
             hubId: 'magallanes',
             title: '3-in-1 Coffee Bulk Pack',
             totalPrice: 900,
@@ -139,10 +144,13 @@ class PostgrestSupabaseDealGateway implements SupabaseDealGateway {
 
   final SupabaseClient _client;
 
+  /// Reads the deal_feed view rather than the deals table: it carries the
+  /// host's display name, which lives in profiles and is not readable there
+  /// (that policy is own-row-only, by design — profiles also holds emails).
   @override
   Future<List<Map<String, dynamic>>> getDeals(String hubId) async {
     final rows = await _client
-        .from('deals')
+        .from('deal_feed')
         .select()
         .eq('hub_id', hubId)
         .order('created_at', ascending: false);
@@ -222,6 +230,10 @@ class SupabaseDealRepository implements DealRepository {
       hubId: row['hub_id'] as String,
       title: row['title'] as String,
       description: row['description'] as String?,
+      createdBy: row['created_by'] as String?,
+      // Absent when the row came back from an insert into deals; the view is
+      // what carries it.
+      hostName: row['host_name'] as String?,
       category: _mapCategory(row['category'] as String),
       totalPrice: (row['total_price'] as num).toDouble(),
       quantity: (row['quantity'] as num).toInt(),

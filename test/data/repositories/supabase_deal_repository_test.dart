@@ -21,6 +21,8 @@ void main() {
             'pickup_location': 'USJR Main Gate',
             'status': 'open',
             'closes_at': '2026-07-16T15:59:00.000Z',
+            'created_by': 'user-9',
+            'host_name': 'Marco Villanueva',
           },
         ],
       ),
@@ -37,6 +39,37 @@ void main() {
     expect(deals.single.status, DealStatus.open);
     expect(deals.single.priceLabel, 'P180/share');
     expect(deals.single.closesAt, isNotNull);
+    // host_name only exists on the deal_feed view, not the deals table.
+    expect(deals.single.createdBy, 'user-9');
+    expect(deals.single.hostName, 'Marco Villanueva');
+  });
+
+  test('falls back when the deal_feed row has no host name', () async {
+    final repository = SupabaseDealRepository(
+      gateway: _FakeSupabaseDealGateway(
+        rows: [
+          {
+            'id': 'deal-2',
+            'hub_id': 'colon',
+            'title': 'Cooking Oil 5L',
+            'category': 'pantry',
+            'total_price': 750,
+            'quantity': 1,
+            'available_slots': 5,
+            'total_slots': 5,
+            'pickup_location': 'USJR Main Gate',
+            'status': 'open',
+            'host_name': null,
+          },
+        ],
+      ),
+      currentUserId: () => 'user-1',
+    );
+
+    final deals = await repository.getDeals('colon');
+
+    expect(deals.single.hostName, isNull);
+    expect(deals.single.hostLabel, 'A student in this hub');
   });
 
   test('publishes a deal with the signed-in student as the author', () async {
