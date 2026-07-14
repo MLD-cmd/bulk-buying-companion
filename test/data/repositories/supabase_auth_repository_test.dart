@@ -98,19 +98,46 @@ void main() {
         const SupabaseAuthGatewayException(
           message: 'Invalid login credentials',
           statusCode: '400',
+          code: 'invalid_credentials',
         ): 'Incorrect email or password.',
         const SupabaseAuthGatewayException(
           message: 'User already registered',
           statusCode: '422',
+          code: 'user_already_exists',
         ): 'An account already exists for this email.',
         const SupabaseAuthGatewayException(
           message: 'Email rate limit exceeded',
           statusCode: '429',
+          code: 'over_email_send_rate_limit',
         ): 'Too many attempts. Please wait and try again.',
         const SupabaseAuthGatewayException(
           message: 'SocketException',
           isNetworkFailure: true,
         ): 'Check your internet connection and try again.',
+
+        // Supabase phrases this as 'Email address "..." is invalid', which the
+        // old message-matching missed because it looked for 'invalid email' --
+        // the same two words, the other way round. The student was told
+        // "Authentication is unavailable" and had no idea what to fix.
+        const SupabaseAuthGatewayException(
+          message: 'Email address "student@gmail.com" is invalid',
+          statusCode: '400',
+          code: 'email_address_invalid',
+        ): 'Enter a valid email address.',
+
+        // Sign-up sends a confirmation mail, so this is the state a student is
+        // in between registering and clicking the link.
+        const SupabaseAuthGatewayException(
+          message: 'Email not confirmed',
+          statusCode: '400',
+          code: 'email_not_confirmed',
+        ): 'Confirm your email address, then log in.',
+
+        const SupabaseAuthGatewayException(
+          message: 'Password should be at least 6 characters',
+          statusCode: '422',
+          code: 'weak_password',
+        ): 'Choose a longer password.',
       };
 
       for (final entry in cases.entries) {
@@ -127,6 +154,45 @@ void main() {
           ),
         );
       }
+    });
+
+    test('reads the error code, not the English in the message', () async {
+      // The message is Supabase's prose and can be reworded at any time -- it
+      // already caught us out once. The code is the contract.
+      gateway.nextError = const SupabaseAuthGatewayException(
+        message: 'some entirely new wording from a future release',
+        statusCode: '400',
+        code: 'email_address_invalid',
+      );
+
+      await expectLater(
+        repository.signIn(email: 'student@gmail.com', password: 'Password1'),
+        throwsA(
+          isA<AuthFailure>().having(
+            (error) => error.message,
+            'message',
+            'Enter a valid email address.',
+          ),
+        ),
+      );
+    });
+
+    test('still falls back to a safe message on an unknown failure', () async {
+      gateway.nextError = const SupabaseAuthGatewayException(
+        message: 'something nobody has seen before',
+        statusCode: '500',
+      );
+
+      await expectLater(
+        repository.signIn(email: 'student@gmail.com', password: 'Password1'),
+        throwsA(
+          isA<AuthFailure>().having(
+            (error) => error.message,
+            'message',
+            'Authentication is unavailable. Please try again.',
+          ),
+        ),
+      );
     });
 
     test('signs out through the gateway', () async {

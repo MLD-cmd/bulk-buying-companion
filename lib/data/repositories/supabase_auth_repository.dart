@@ -29,11 +29,20 @@ class SupabaseAuthGatewayException implements Exception {
   const SupabaseAuthGatewayException({
     required this.message,
     this.statusCode,
+    this.code,
     this.isNetworkFailure = false,
   });
 
+  /// Supabase's own prose, e.g. 'Email address "..." is invalid'. Useful for
+  /// logs, but it is not a contract: it gets reworded between releases.
   final String message;
+
   final String? statusCode;
+
+  /// Supabase's stable error code, e.g. 'email_address_invalid'. This is what
+  /// the repository decides on — see [SupabaseAuthRepository._messageFor].
+  final String? code;
+
   final bool isNetworkFailure;
 }
 
@@ -138,6 +147,7 @@ class GoTrueSupabaseAuthGateway implements SupabaseAuthGateway {
     return SupabaseAuthGatewayException(
       message: error.message,
       statusCode: error.statusCode,
+      code: error.code,
       isNetworkFailure: error is AuthRetryableFetchException,
     );
   }
@@ -214,11 +224,32 @@ class SupabaseAuthRepository implements AuthRepository {
     );
   }
 
+  /// Decides on Supabase's error [code] rather than its prose. Matching English
+  /// is how 'Email address "..." is invalid' slipped past a check looking for
+  /// 'invalid email' — the same two words, the other way round — and left the
+  /// student staring at "Authentication is unavailable" with nothing to act on.
+  /// The message is still read afterwards, but only as a backstop for the
+  /// errors that arrive without a code.
   String _messageFor(SupabaseAuthGatewayException error) {
-    final message = error.message.toLowerCase();
     if (error.isNetworkFailure) {
       return 'Check your internet connection and try again.';
     }
+
+    final byCode = switch (error.code) {
+      'invalid_credentials' => 'Incorrect email or password.',
+      'user_already_exists' ||
+      'email_exists' => 'An account already exists for this email.',
+      'email_address_invalid' => 'Enter a valid email address.',
+      'email_not_confirmed' => 'Confirm your email address, then log in.',
+      'weak_password' => 'Choose a longer password.',
+      'over_email_send_rate_limit' ||
+      'over_request_rate_limit' => 'Too many attempts. Please wait and try again.',
+      'signup_disabled' => 'New accounts are not being accepted right now.',
+      _ => null,
+    };
+    if (byCode != null) return byCode;
+
+    final message = error.message.toLowerCase();
     if (error.statusCode == '429' || message.contains('rate limit')) {
       return 'Too many attempts. Please wait and try again.';
     }
@@ -229,7 +260,7 @@ class SupabaseAuthRepository implements AuthRepository {
         message.contains('already exists')) {
       return 'An account already exists for this email.';
     }
-    if (message.contains('invalid email')) {
+    if (message.contains('invalid') && message.contains('email')) {
       return 'Enter a valid email address.';
     }
     return 'Authentication is unavailable. Please try again.';
