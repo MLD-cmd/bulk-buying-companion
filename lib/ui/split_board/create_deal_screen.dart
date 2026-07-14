@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/deal_repository.dart';
+import '../../models/cost_split.dart';
 import '../../models/deal.dart';
 import '../shared/app_theme.dart';
 import 'create_deal_viewmodel.dart';
@@ -166,7 +167,7 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
                       validator: viewModel.validateTotalSlots,
                     ),
                     _SplitPreview(
-                      pricePerShare: viewModel.previewPricePerShare(
+                      split: viewModel.previewSplit(
                         totalPrice: _totalPriceController.text,
                         totalSlots: _totalSlotsController.text,
                       ),
@@ -325,31 +326,49 @@ class _CategorySelector extends StatelessWidget {
 
 /// The whole point of the app: what one student actually pays.
 class _SplitPreview extends StatelessWidget {
-  const _SplitPreview({required this.pricePerShare});
+  const _SplitPreview({required this.split});
 
-  final double? pricePerShare;
+  final CostSplit? split;
 
   @override
   Widget build(BuildContext context) {
-    if (pricePerShare == null) return const SizedBox.shrink();
+    final split = this.split;
+    if (split == null) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
-    final share = formatPeso(pricePerShare!);
 
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.call_split, size: 16, color: theme.colorScheme.primary),
-          const SizedBox(width: 6),
-          Text(
-            'Each student pays $share',
-            key: const Key('deal-split-preview'),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: theme.colorScheme.primary,
-            ),
+          Row(
+            children: [
+              Icon(Icons.call_split, size: 16, color: theme.colorScheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Each student pays ${formatPeso(split.pricePerShare)}',
+                key: const Key('deal-split-preview'),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
           ),
+          // An uneven split is stated, not hidden: the shares round up, so they
+          // collect a few centavos more than the item costs.
+          if (!split.isEven) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${split.slots} shares collect ${formatPeso(split.collected)} — '
+              '${formatPeso(split.surplus)} over. The difference stays with you.',
+              key: const Key('deal-split-surplus'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ],
       ),
     );

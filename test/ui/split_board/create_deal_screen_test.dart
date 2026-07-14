@@ -113,6 +113,28 @@ void main() {
     expect(find.text('Each student pays P180'), findsOneWidget);
   });
 
+  testWidgets('states the surplus when the split does not divide evenly', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    await fillForm(tester, totalPrice: '900', totalSlots: '7');
+
+    expect(find.text('Each student pays P128.58'), findsOneWidget);
+    expect(find.byKey(const Key('deal-split-surplus')), findsOneWidget);
+  });
+
+  testWidgets('says nothing about a surplus on an even split', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    await fillForm(tester, totalPrice: '900', totalSlots: '5');
+
+    expect(find.text('Each student pays P180'), findsOneWidget);
+    expect(find.byKey(const Key('deal-split-surplus')), findsNothing);
+  });
+
   testWidgets('refuses to publish an incomplete deal', (tester) async {
     final repository = _RecordingDealRepository();
     await pumpScreen(tester, repository);
