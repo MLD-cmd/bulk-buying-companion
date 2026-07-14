@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/deal_repository.dart';
@@ -126,6 +127,15 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
+                            // keyboardType is only a hint — a paste, or a
+                            // desktop keyboard, will happily put 'Infinity' or
+                            // '1e400' in here, and both parse to a double the
+                            // centavo arithmetic cannot use.
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.]'),
+                              ),
+                            ],
                             onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               labelText: 'Total price',

@@ -28,9 +28,16 @@ void main() {
   });
 
   test('the shares always cover the total, by under a centavo each', () {
-    // The property the whole type exists to guarantee. Asserted across the
-    // real input range rather than on a couple of hand-picked cases.
-    for (var centavos = 1; centavos <= 200; centavos++) {
+    // The property the whole type exists to guarantee. Swept across the real
+    // input range — sub-peso amounts, everyday campus prices, and the far end
+    // of what the type accepts — rather than a couple of hand-picked cases.
+    final totals = <int>[
+      for (var centavos = 1; centavos <= 200; centavos++) centavos,
+      for (var pesos = 1; pesos <= 5000; pesos += 7) pesos * 100 + 1,
+      for (var pesos = 100000; pesos <= 1000000; pesos += 33333) pesos * 100 - 1,
+    ];
+
+    for (final centavos in totals) {
       for (var slots = 2; slots <= 50; slots++) {
         final split = CostSplit.from(totalPrice: centavos / 100, slots: slots);
 
@@ -84,5 +91,66 @@ void main() {
     expect(deal.pricePerShare, 128.58);
     expect(deal.priceLabel, 'P128.58/share');
     expect(deal.costSplit.surplusCentavos, 6);
+  });
+
+  test('rejects a total that is not a finite number', () {
+    // double.tryParse returns these for '1e400' and 'NaN', and (x * 100).round()
+    // throws UnsupportedError on both.
+    expect(
+      () => CostSplit.from(totalPrice: double.infinity, slots: 5),
+      throwsArgumentError,
+    );
+    expect(
+      () => CostSplit.from(totalPrice: double.nan, slots: 5),
+      throwsArgumentError,
+    );
+  });
+
+  test('rejects a total so large the centavo arithmetic would overflow', () {
+    // (1e30 * 100).round() saturates at the int64 ceiling, and the ceiling
+    // division then wraps negative — the shares would stop covering the total.
+    expect(() => CostSplit.from(totalPrice: 1e30, slots: 5), throwsArgumentError);
+
+    // The boundary itself still splits correctly.
+    final atLimit = CostSplit.from(
+      totalPrice: CostSplit.maxTotalPrice,
+      slots: 7,
+    );
+    expect(atLimit.collectedCentavos, greaterThanOrEqualTo(atLimit.totalCentavos));
+    expect(atLimit.perShareCentavos, greaterThan(0));
+  });
+
+  test('a malformed deal is clamped rather than left to crash the feed', () {
+    // A Deal is built straight from a database row and its split is read during
+    // build. Bad rows must degrade, not throw.
+    const noSlots = Deal(
+      id: 'no-slots',
+      hubId: 'colon',
+      title: 'Malformed',
+      category: DealCategory.grocery,
+      totalPrice: 900,
+      quantity: 1,
+      availableSlots: 0,
+      totalSlots: 0,
+      pickupLocation: 'USJR Main Gate',
+      status: DealStatus.open,
+    );
+    const noPrice = Deal(
+      id: 'no-price',
+      hubId: 'colon',
+      title: 'Malformed',
+      category: DealCategory.grocery,
+      totalPrice: 0,
+      quantity: 1,
+      availableSlots: 5,
+      totalSlots: 5,
+      pickupLocation: 'USJR Main Gate',
+      status: DealStatus.open,
+    );
+
+    expect(() => noSlots.pricePerShare, returnsNormally);
+    expect(() => noPrice.pricePerShare, returnsNormally);
+    expect(() => noSlots.priceLabel, returnsNormally);
+    expect(() => noPrice.priceLabel, returnsNormally);
   });
 }

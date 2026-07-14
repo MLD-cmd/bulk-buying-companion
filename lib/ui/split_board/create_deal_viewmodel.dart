@@ -41,11 +41,20 @@ class CreateDealViewModel extends ChangeNotifier {
     final text = (value ?? '').trim();
     if (text.isEmpty) return 'Enter the total price.';
     final parsed = double.tryParse(text);
-    if (parsed == null) return 'Total price must be a number.';
+    // 'Infinity', 'NaN' and '1e400' all parse to a double happily, and the
+    // centavo arithmetic cannot do anything with them.
+    if (parsed == null || !parsed.isFinite) {
+      return 'Total price must be a number.';
+    }
     if (parsed <= 0) return 'Total price must be more than 0.';
-    // Below a centavo the split rounds away to zero and every student pays
-    // nothing, which is not a deal.
-    if ((parsed * 100).round() < 1) return 'Total price must be at least P0.01.';
+    // Below a centavo the split rounds away to nothing and every student pays
+    // zero, which is not a deal. Compared in pesos, not via the rounded
+    // centavo: P0.005 would round *up* to a centavo and slip through, leaving
+    // the stored total and the split disagreeing about what the deal costs.
+    if (parsed < 0.01) return 'Total price must be at least P0.01.';
+    if (parsed > CostSplit.maxTotalPrice) {
+      return 'That is more than a bulk buy can total.';
+    }
     return null;
   }
 
@@ -98,8 +107,12 @@ class CreateDealViewModel extends ChangeNotifier {
   }
 
   /// The split shown live under the price field, so the poster sees exactly
-  /// what students will be asked to pay before publishing. Null while the
-  /// inputs are unusable.
+  /// what students will be asked to pay before publishing.
+  ///
+  /// Null — never an exception — while the inputs are unusable: this runs on
+  /// every keystroke from inside build, and a half-typed price must not take
+  /// the form down. Only the split bounds are enforced here; the rest of the
+  /// validation has its say on submit.
   CostSplit? previewSplit({
     required String? totalPrice,
     required String? totalSlots,
@@ -107,18 +120,13 @@ class CreateDealViewModel extends ChangeNotifier {
     final price = double.tryParse((totalPrice ?? '').trim());
     final slots = int.tryParse((totalSlots ?? '').trim());
     if (price == null || slots == null) return null;
-    if (slots < 1 || (price * 100).round() < 1) return null;
+    if (!price.isFinite || price < 0.01 || price > CostSplit.maxTotalPrice) {
+      return null;
+    }
+    // Previewing a one-way "split" would quote a confident price that
+    // validateTotalSlots then rejects on submit.
+    if (slots < kMinDealSlots || slots > kMaxDealSlots) return null;
     return CostSplit.from(totalPrice: price, slots: slots);
-  }
-
-  double? previewPricePerShare({
-    required String? totalPrice,
-    required String? totalSlots,
-  }) {
-    return previewSplit(
-      totalPrice: totalPrice,
-      totalSlots: totalSlots,
-    )?.pricePerShare;
   }
 
   /// Returns the published deal, or null when it was rejected. The reason is
