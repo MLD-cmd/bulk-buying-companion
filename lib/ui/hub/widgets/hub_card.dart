@@ -14,12 +14,18 @@ class HubCard extends StatelessWidget {
     required this.onRequestSwitch,
     required this.onConfirmSwitch,
     required this.onCancelSwitch,
+    this.isBusy = false,
   });
 
   final Hub hub;
   final bool isJoined;
   final bool isPendingSwitch;
   final bool showSwitchAction;
+
+  /// A join or leave is already in flight. The actions go dead so a second tap
+  /// cannot be counted against a membership row that only ever holds one.
+  final bool isBusy;
+
   final VoidCallback onJoin;
   final VoidCallback onRequestSwitch;
   final VoidCallback onConfirmSwitch;
@@ -118,7 +124,7 @@ class HubCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           FilledButton(
-            onPressed: onConfirmSwitch,
+            onPressed: isBusy ? null : onConfirmSwitch,
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               minimumSize: const Size(0, 36),
@@ -127,7 +133,7 @@ class HubCard extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           OutlinedButton(
-            onPressed: onCancelSwitch,
+            onPressed: isBusy ? null : onCancelSwitch,
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               minimumSize: const Size(0, 36),
@@ -140,7 +146,7 @@ class HubCard extends StatelessWidget {
 
     if (showSwitchAction) {
       return OutlinedButton(
-        onPressed: onRequestSwitch,
+        onPressed: isBusy ? null : onRequestSwitch,
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 14),
           minimumSize: const Size(0, 36),
@@ -150,7 +156,8 @@ class HubCard extends StatelessWidget {
     }
 
     return FilledButton(
-      onPressed: onJoin,
+      key: const Key('hub-join-button'),
+      onPressed: isBusy ? null : onJoin,
       style: FilledButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 14),
         minimumSize: const Size(0, 36),
