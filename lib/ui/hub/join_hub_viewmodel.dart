@@ -40,6 +40,7 @@ class JoinHubViewModel extends ChangeNotifier {
   String? _locationFailureMessage;
   bool _isLoading = true;
   bool _nearbyOnly = false;
+  bool _isUpdatingMembership = false;
 
   List<Hub> get filteredHubs {
     var hubs = _hubs;
@@ -71,6 +72,11 @@ class JoinHubViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get locationFailureMessage => _locationFailureMessage;
   bool get nearbyOnly => _nearbyOnly;
+
+  /// True while a join or leave is in flight. The hub actions disable
+  /// themselves on it, so the guard in [join] is a backstop rather than the
+  /// only thing standing between a double tap and a wrong count.
+  bool get isUpdatingMembership => _isUpdatingMembership;
 
   /// Without a location fix every distance is null, so the filter would have
   /// nothing to act on — the UI hides the control instead of offering a no-op.
@@ -180,16 +186,28 @@ class JoinHubViewModel extends ChangeNotifier {
   Future<void> join(String hubId) async {
     final userId = _authRepository.currentUser?.uid;
     if (userId == null) return;
-    final previousHubId = _joinedHubId;
-    await _hubRepository.joinHub(userId: userId, hubId: hubId);
-    _joinedHubId = hubId;
-    // The membership row just moved server-side; mirror that locally rather
-    // than waiting on a full reload for the member counts to catch up.
-    if (previousHubId != null && previousHubId != hubId) {
-      _adjustMemberCount(previousHubId, -1);
-    }
-    if (previousHubId != hubId) _adjustMemberCount(hubId, 1);
+    // A second tap while the first is still in flight would read the same
+    // stale _joinedHubId and count the same student twice. The backend upsert
+    // is keyed on user_id, so it never creates a second membership — only the
+    // local count would drift, and it would stay wrong until a full reload.
+    if (_isUpdatingMembership) return;
+
+    _isUpdatingMembership = true;
     notifyListeners();
+
+    try {
+      final previousHubId = _joinedHubId;
+      await _hubRepository.joinHub(userId: userId, hubId: hubId);
+      _joinedHubId = hubId;
+      // The membership row just moved server-side; mirror that locally rather
+      // than waiting on a full reload for the member counts to catch up.
+      if (previousHubId == hubId) return;
+      if (previousHubId != null) _adjustMemberCount(previousHubId, -1);
+      _adjustMemberCount(hubId, 1);
+    } finally {
+      _isUpdatingMembership = false;
+      notifyListeners();
+    }
   }
 
   void requestSwitch(String hubId) {
@@ -212,12 +230,23 @@ class JoinHubViewModel extends ChangeNotifier {
   Future<void> leave() async {
     final userId = _authRepository.currentUser?.uid;
     if (userId == null) return;
-    final hubId = _joinedHubId;
-    await _hubRepository.leaveHub(userId: userId);
-    if (hubId != null) _adjustMemberCount(hubId, -1);
-    _joinedHubId = null;
-    _pendingSwitchId = null;
+    // Same reasoning as [join]: a double tap would decrement the count twice
+    // against a single membership row.
+    if (_isUpdatingMembership) return;
+
+    _isUpdatingMembership = true;
     notifyListeners();
+
+    try {
+      final hubId = _joinedHubId;
+      await _hubRepository.leaveHub(userId: userId);
+      if (hubId != null) _adjustMemberCount(hubId, -1);
+      _joinedHubId = null;
+      _pendingSwitchId = null;
+    } finally {
+      _isUpdatingMembership = false;
+      notifyListeners();
+    }
   }
 
   /// Applies [delta] to the given hub's local member count, clamped so a

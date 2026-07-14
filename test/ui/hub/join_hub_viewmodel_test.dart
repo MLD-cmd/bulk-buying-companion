@@ -232,6 +232,87 @@ void main() {
     );
   });
 
+  test('a double-tapped join counts the student once, not twice', () async {
+    // The backend upsert is keyed on user_id, so a second tap rewrites the same
+    // membership row and never creates a second one. Only the local count can
+    // drift — and it did, because both calls read the same stale _joinedHubId
+    // before either await resolved.
+    final hubRepository = _BlockingHubRepository(hubs: _unsortedDirectory);
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: hubRepository,
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+    hubRepository.blockJoins();
+
+    // Two taps, the second landing while the first is still in flight.
+    final first = viewModel.join('near');
+    final second = viewModel.join('near');
+    expect(viewModel.isUpdatingMembership, isTrue);
+
+    hubRepository.releaseJoins();
+    await Future.wait([first, second]);
+
+    expect(hubRepository.joinCalls, 1, reason: 'the second tap must be a no-op');
+    expect(viewModel.joinedHub?.memberCount, 4, reason: 'was 3 before joining');
+    expect(viewModel.isUpdatingMembership, isFalse);
+  });
+
+  test('a double-tapped leave decrements the count once', () async {
+    final hubRepository = _BlockingHubRepository(hubs: _unsortedDirectory);
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: hubRepository,
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+    await viewModel.join('near');
+    expect(viewModel.joinedHub?.memberCount, 4);
+
+    hubRepository.blockLeaves();
+    final first = viewModel.leave();
+    final second = viewModel.leave();
+    hubRepository.releaseLeaves();
+    await Future.wait([first, second]);
+
+    expect(hubRepository.leaveCalls, 1);
+    expect(
+      viewModel.filteredHubs.firstWhere((hub) => hub.id == 'near').memberCount,
+      3,
+      reason: 'back to where it started, not 2',
+    );
+  });
+
+  test('the membership flag is cleared even when the join fails', () async {
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: _JoinFailingHubRepository(hubs: _unsortedDirectory),
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+
+    await expectLater(viewModel.join('near'), throwsStateError);
+
+    // A failed join must not wedge the button permanently.
+    expect(viewModel.isUpdatingMembership, isFalse);
+    expect(viewModel.joinedHubId, isNull);
+    expect(
+      viewModel.filteredHubs.firstWhere((hub) => hub.id == 'near').memberCount,
+      3,
+      reason: 'nothing was joined, so nothing should have been counted',
+    );
+  });
+
   test('stops loading when hub data fails to load', () async {
     final viewModel = JoinHubViewModel(
       authRepository: _SignedInAuthRepository(),
@@ -287,6 +368,70 @@ const _unsortedDirectory = [
     distanceLabel: 'Distance unavailable',
   ),
 ];
+
+/// Lets a join or leave be held mid-flight, so a second call can land while the
+/// first is still awaiting — which is the whole bug.
+class _BlockingHubRepository implements HubRepository {
+  _BlockingHubRepository({required List<Hub> hubs}) : _hubs = hubs;
+
+  final List<Hub> _hubs;
+  Completer<void>? _joinGate;
+  Completer<void>? _leaveGate;
+
+  int joinCalls = 0;
+  int leaveCalls = 0;
+
+  void blockJoins() => _joinGate = Completer<void>();
+  void releaseJoins() => _joinGate?.complete();
+  void blockLeaves() => _leaveGate = Completer<void>();
+  void releaseLeaves() => _leaveGate?.complete();
+
+  @override
+  Future<List<Hub>> getHubs() async => _hubs;
+
+  @override
+  Future<Hub> createHub(HubDraft draft) => throw UnimplementedError();
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {
+    joinCalls += 1;
+    final gate = _joinGate;
+    if (gate != null) await gate.future;
+  }
+
+  @override
+  Future<void> leaveHub({required String userId}) async {
+    leaveCalls += 1;
+    final gate = _leaveGate;
+    if (gate != null) await gate.future;
+  }
+}
+
+class _JoinFailingHubRepository implements HubRepository {
+  _JoinFailingHubRepository({required List<Hub> hubs}) : _hubs = hubs;
+
+  final List<Hub> _hubs;
+
+  @override
+  Future<List<Hub>> getHubs() async => _hubs;
+
+  @override
+  Future<Hub> createHub(HubDraft draft) => throw UnimplementedError();
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) {
+    throw StateError('membership table unavailable');
+  }
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
 
 class _SignedInAuthRepository implements AuthRepository {
   @override

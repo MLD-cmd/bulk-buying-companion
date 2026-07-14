@@ -272,6 +272,7 @@ class _HubList extends StatelessWidget {
           isJoined: isJoined,
           isPendingSwitch: isPending,
           showSwitchAction: showSwitch,
+          isBusy: viewModel.isUpdatingMembership,
           onJoin: () => viewModel.join(hub.id),
           onRequestSwitch: () => viewModel.requestSwitch(hub.id),
           onConfirmSwitch: viewModel.confirmSwitch,
