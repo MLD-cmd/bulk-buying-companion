@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -179,8 +180,15 @@ class JoinHubViewModel extends ChangeNotifier {
   Future<void> join(String hubId) async {
     final userId = _authRepository.currentUser?.uid;
     if (userId == null) return;
+    final previousHubId = _joinedHubId;
     await _hubRepository.joinHub(userId: userId, hubId: hubId);
     _joinedHubId = hubId;
+    // The membership row just moved server-side; mirror that locally rather
+    // than waiting on a full reload for the member counts to catch up.
+    if (previousHubId != null && previousHubId != hubId) {
+      _adjustMemberCount(previousHubId, -1);
+    }
+    if (previousHubId != hubId) _adjustMemberCount(hubId, 1);
     notifyListeners();
   }
 
@@ -204,10 +212,21 @@ class JoinHubViewModel extends ChangeNotifier {
   Future<void> leave() async {
     final userId = _authRepository.currentUser?.uid;
     if (userId == null) return;
+    final hubId = _joinedHubId;
     await _hubRepository.leaveHub(userId: userId);
+    if (hubId != null) _adjustMemberCount(hubId, -1);
     _joinedHubId = null;
     _pendingSwitchId = null;
     notifyListeners();
+  }
+
+  /// Applies [delta] to the given hub's local member count, clamped so a
+  /// stale count can never dip below zero.
+  void _adjustMemberCount(String hubId, int delta) {
+    _hubs = _hubs.map((hub) {
+      if (hub.id != hubId) return hub;
+      return hub.copyWith(memberCount: max(0, hub.memberCount + delta));
+    }).toList();
   }
 
   @override

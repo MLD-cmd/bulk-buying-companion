@@ -164,6 +164,74 @@ void main() {
     expect(viewModel.filteredHubs, hasLength(4));
   });
 
+  test('bumps the local member count when joining a hub', () async {
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: _HubRepositoryWithDirectory(hubs: _unsortedDirectory),
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+
+    await viewModel.join('near');
+
+    expect(viewModel.joinedHubId, 'near');
+    expect(viewModel.joinedHub?.memberCount, 4);
+  });
+
+  test(
+    'moves the member count from the old hub to the new one on switch',
+    () async {
+      final viewModel = JoinHubViewModel(
+        authRepository: _SignedInAuthRepository(),
+        hubRepository: _HubRepositoryWithDirectory(hubs: _unsortedDirectory),
+        locationService: _FakeLocationService(
+          result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+        ),
+      );
+
+      await pumpEventQueue();
+
+      await viewModel.join('near');
+      expect(viewModel.joinedHub?.memberCount, 4);
+
+      viewModel.requestSwitch('north');
+      await viewModel.confirmSwitch();
+
+      expect(viewModel.joinedHubId, 'north');
+      expect(viewModel.joinedHub?.memberCount, 8);
+      expect(
+        viewModel.filteredHubs
+            .firstWhere((hub) => hub.id == 'near')
+            .memberCount,
+        3,
+      );
+    },
+  );
+
+  test('drops the local member count when leaving a hub', () async {
+    final viewModel = JoinHubViewModel(
+      authRepository: _SignedInAuthRepository(),
+      hubRepository: _HubRepositoryWithDirectory(hubs: _unsortedDirectory),
+      locationService: _FakeLocationService(
+        result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+      ),
+    );
+
+    await pumpEventQueue();
+
+    await viewModel.join('near');
+    await viewModel.leave();
+
+    expect(viewModel.joinedHubId, isNull);
+    expect(
+      viewModel.filteredHubs.firstWhere((hub) => hub.id == 'near').memberCount,
+      3,
+    );
+  });
+
   test('stops loading when hub data fails to load', () async {
     final viewModel = JoinHubViewModel(
       authRepository: _SignedInAuthRepository(),

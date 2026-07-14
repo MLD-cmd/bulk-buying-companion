@@ -30,12 +30,16 @@ class Hub {
 
   bool get hasCoordinates => latitude != null && longitude != null;
 
-  Hub copyWith({String? distanceLabel, double? distanceMeters}) {
+  Hub copyWith({
+    String? distanceLabel,
+    double? distanceMeters,
+    int? memberCount,
+  }) {
     return Hub(
       id: id,
       name: name,
       type: type,
-      memberCount: memberCount,
+      memberCount: memberCount ?? this.memberCount,
       distanceLabel: distanceLabel ?? this.distanceLabel,
       latitude: latitude,
       longitude: longitude,
