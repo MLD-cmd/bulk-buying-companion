@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/models/cost_split.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -81,7 +82,8 @@ void main() {
       title: '25kg Rice Sack',
       category: DealCategory.grocery,
       totalPrice: 900,
-      quantity: 1,
+      amount: 25,
+      unit: DealUnit.kg,
       availableSlots: 7,
       totalSlots: 7,
       pickupLocation: 'USJR Main Gate',
@@ -129,7 +131,8 @@ void main() {
       title: 'Malformed',
       category: DealCategory.grocery,
       totalPrice: 900,
-      quantity: 1,
+      amount: 1,
+      unit: DealUnit.pieces,
       availableSlots: 0,
       totalSlots: 0,
       pickupLocation: 'USJR Main Gate',
@@ -141,7 +144,8 @@ void main() {
       title: 'Malformed',
       category: DealCategory.grocery,
       totalPrice: 0,
-      quantity: 1,
+      amount: 1,
+      unit: DealUnit.pieces,
       availableSlots: 5,
       totalSlots: 5,
       pickupLocation: 'USJR Main Gate',

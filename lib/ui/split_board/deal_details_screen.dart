@@ -69,10 +69,7 @@ class DealDetailsScreen extends StatelessWidget {
                     children: [
                       _Pill(label: deal.category.label),
                       const SizedBox(width: 8),
-                      _Pill(
-                        label:
-                            '${deal.quantity} ${deal.quantity == 1 ? 'unit' : 'units'}',
-                      ),
+                      _Pill(label: deal.physicalShare.totalLabel),
                     ],
                   ),
                   if (deal.description != null &&
@@ -226,6 +223,15 @@ class _CostCard extends StatelessWidget {
                       key: const Key('detail-cost-per-slot'),
                       style: theme.textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      deal.physicalShare.shareLabel,
+                      key: const Key('detail-physical-share'),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                         color: theme.colorScheme.onPrimaryContainer,
                       ),
                     ),

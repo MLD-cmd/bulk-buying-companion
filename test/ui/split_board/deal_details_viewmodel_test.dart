@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/ui/split_board/deal_details_viewmodel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -84,7 +85,8 @@ DealDetailsViewModel _viewModel({
     createdBy: 'user-1',
     category: DealCategory.grocery,
     totalPrice: 900,
-    quantity: 1,
+    amount: 1,
+    unit: DealUnit.kg,
     availableSlots: availableSlots,
     totalSlots: 5,
     pickupLocation: 'USJR Main Gate',

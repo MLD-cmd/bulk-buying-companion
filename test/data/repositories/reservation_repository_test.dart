@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -186,7 +187,8 @@ Map<String, dynamic> _dealRow({required int availableSlots}) => {
   'created_by': 'user-1',
   'category': 'grocery',
   'total_price': 900,
-  'quantity': 1,
+  'amount': 25,
+  'unit': 'kg',
   'available_slots': availableSlots,
   'total_slots': 5,
   'pickup_location': 'USJR Main Gate',
@@ -201,7 +203,8 @@ Deal _deal({required int availableSlots}) => Deal(
   createdBy: 'user-1',
   category: DealCategory.grocery,
   totalPrice: 900,
-  quantity: 1,
+  amount: 25,
+  unit: DealUnit.kg,
   availableSlots: availableSlots,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',

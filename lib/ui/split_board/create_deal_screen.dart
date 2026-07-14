@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../../data/repositories/deal_repository.dart';
 import '../../models/cost_split.dart';
 import '../../models/deal.dart';
+import '../../models/deal_unit.dart';
+import '../../models/physical_share.dart';
 import '../shared/app_theme.dart';
 import 'create_deal_viewmodel.dart';
 
@@ -38,11 +40,12 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _totalPriceController = TextEditingController();
-  final _quantityController = TextEditingController();
+  final _amountController = TextEditingController();
   final _totalSlotsController = TextEditingController();
   final _pickupLocationController = TextEditingController();
 
   DealCategory _category = DealCategory.grocery;
+  DealUnit _unit = DealUnit.kg;
   DateTime? _closesAt;
   String? _deadlineError;
 
@@ -51,7 +54,7 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _totalPriceController.dispose();
-    _quantityController.dispose();
+    _amountController.dispose();
     _totalSlotsController.dispose();
     _pickupLocationController.dispose();
     super.dispose();
@@ -149,18 +152,34 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextFormField(
-                            key: const Key('deal-quantity-field'),
-                            controller: _quantityController,
-                            keyboardType: TextInputType.number,
+                            key: const Key('deal-amount-field'),
+                            controller: _amountController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9.]'),
+                              ),
+                            ],
+                            onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
-                              labelText: 'Quantity',
-                              hintText: '1',
+                              labelText: 'Amount',
+                              hintText: '25',
                               border: OutlineInputBorder(),
                             ),
-                            validator: viewModel.validateQuantity,
+                            validator: (value) =>
+                                viewModel.validateAmount(value, _unit),
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    _UnitSelector(
+                      unit: _unit,
+                      onChanged: viewModel.isSubmitting
+                          ? null
+                          : (unit) => setState(() => _unit = unit),
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
@@ -168,17 +187,33 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
                       controller: _totalSlotsController,
                       keyboardType: TextInputType.number,
                       onChanged: (_) => setState(() {}),
+                      // The refusal names a slot count ("across 4 slots"), and
+                      // the preview below it updates as the poster types. Left
+                      // to validate on submit only, the two contradict each
+                      // other the moment the poster fixes the count.
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       decoration: const InputDecoration(
                         labelText: 'Slots',
                         hintText: 'How many students split this?',
                         prefixIcon: Icon(Icons.groups_outlined),
                         border: OutlineInputBorder(),
                       ),
-                      validator: viewModel.validateTotalSlots,
+                      validator: (value) => viewModel.validateTotalSlots(
+                        value,
+                        amount: _amountController.text,
+                        unit: _unit,
+                      ),
                     ),
                     _SplitPreview(
                       split: viewModel.previewSplit(
                         totalPrice: _totalPriceController.text,
+                        totalSlots: _totalSlotsController.text,
+                      ),
+                    ),
+                    _SharePreview(
+                      share: viewModel.previewShare(
+                        amount: _amountController.text,
+                        unit: _unit,
                         totalSlots: _totalSlotsController.text,
                       ),
                     ),
@@ -293,7 +328,8 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
           : _descriptionController.text,
       category: _category,
       totalPrice: double.parse(_totalPriceController.text.trim()),
-      quantity: int.parse(_quantityController.text.trim()),
+      amount: double.parse(_amountController.text.trim()),
+      unit: _unit,
       totalSlots: int.parse(_totalSlotsController.text.trim()),
       pickupLocation: _pickupLocationController.text,
       closesAt: _closesAt,
@@ -323,6 +359,36 @@ class _CategorySelector extends StatelessWidget {
             key: Key('deal-category-${option.name}'),
             label: Text(option.label),
             selected: option == category,
+            onSelected: onChanged == null
+                ? null
+                : (selected) {
+                    if (selected) onChanged!(option);
+                  },
+          ),
+      ],
+    );
+  }
+}
+
+/// Weights and volumes divide freely; countable goods do not. Picking the unit
+/// is how the poster tells the app which kind of thing this is.
+class _UnitSelector extends StatelessWidget {
+  const _UnitSelector({required this.unit, required this.onChanged});
+
+  final DealUnit unit;
+  final ValueChanged<DealUnit>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final option in DealUnit.values)
+          ChoiceChip(
+            key: Key('deal-unit-${option.name}'),
+            label: Text(option.label),
+            selected: option == unit,
             onSelected: onChanged == null
                 ? null
                 : (selected) {
@@ -379,6 +445,46 @@ class _SplitPreview extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The other half of what a student needs to know: not just what they pay, but
+/// what they actually get.
+class _SharePreview extends StatelessWidget {
+  const _SharePreview({required this.share});
+
+  final PhysicalShare? share;
+
+  @override
+  Widget build(BuildContext context) {
+    final share = this.share;
+    // A split that does not divide is an error, not a preview — the slots field
+    // is already saying so, and repeating it as a cheerful summary would be odd.
+    if (share == null || !share.dividesEvenly) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 16,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Each student gets ${share.shareLabel}',
+            key: const Key('deal-share-preview'),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.primary,
+            ),
+          ),
         ],
       ),
     );

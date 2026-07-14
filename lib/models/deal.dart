@@ -1,4 +1,6 @@
 import 'cost_split.dart';
+import 'deal_unit.dart';
+import 'physical_share.dart';
 
 /// A bulk-buying deal posted within a hub.
 class Deal {
@@ -8,7 +10,8 @@ class Deal {
     required this.title,
     required this.category,
     required this.totalPrice,
-    required this.quantity,
+    required this.amount,
+    required this.unit,
     required this.availableSlots,
     required this.totalSlots,
     required this.pickupLocation,
@@ -44,8 +47,10 @@ class Deal {
   /// student actually pays is derived from this — see [pricePerShare].
   final double totalPrice;
 
-  /// How many units the bulk buy covers (a 24-pack of water is 24).
-  final int quantity;
+  /// How much the bulk buy covers, and in what. The unit also decides whether
+  /// the goods can be divided at all — see [PhysicalShare].
+  final double amount;
+  final DealUnit unit;
 
   final int availableSlots;
   final int totalSlots;
@@ -61,6 +66,11 @@ class Deal {
   /// data, but it must not throw and red-screen the whole feed on the way out.
   CostSplit get costSplit =>
       CostSplit.clamped(totalPrice: totalPrice, slots: totalSlots);
+
+  /// What one student physically receives. Sits beside [costSplit]: together
+  /// they answer the two questions a student has — what do I pay, what do I get.
+  PhysicalShare get physicalShare =>
+      PhysicalShare.from(amount: amount, unit: unit, slots: totalSlots);
 
   double get pricePerShare => costSplit.pricePerShare;
 
@@ -84,7 +94,8 @@ class DealDraft {
     required this.title,
     required this.category,
     required this.totalPrice,
-    required this.quantity,
+    required this.amount,
+    required this.unit,
     required this.totalSlots,
     required this.pickupLocation,
     this.description,
@@ -96,7 +107,8 @@ class DealDraft {
   final String? description;
   final DealCategory category;
   final double totalPrice;
-  final int quantity;
+  final double amount;
+  final DealUnit unit;
   final int totalSlots;
   final String pickupLocation;
   final DateTime? closesAt;

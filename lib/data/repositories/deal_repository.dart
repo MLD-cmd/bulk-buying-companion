@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/deal.dart';
+import '../../models/deal_unit.dart';
 
 /// Turns a `deals` (or `deal_feed`) row into a [Deal].
 ///
@@ -21,7 +22,8 @@ Deal dealFromRow(Map<String, dynamic> row) {
     hostName: row['host_name'] as String?,
     category: _dealCategoryFromValue(row['category'] as String),
     totalPrice: (row['total_price'] as num).toDouble(),
-    quantity: (row['quantity'] as num).toInt(),
+    amount: (row['amount'] as num).toDouble(),
+    unit: _dealUnitFromValue(row['unit'] as String),
     availableSlots: (row['available_slots'] as num).toInt(),
     totalSlots: (row['total_slots'] as num).toInt(),
     pickupLocation: row['pickup_location'] as String,
@@ -34,6 +36,13 @@ DealCategory _dealCategoryFromValue(String value) {
   return DealCategory.values.firstWhere(
     (category) => category.name == value,
     orElse: () => throw StateError('Unknown deal category "$value".'),
+  );
+}
+
+DealUnit _dealUnitFromValue(String value) {
+  return DealUnit.values.firstWhere(
+    (unit) => unit.name == value,
+    orElse: () => throw StateError('Unknown deal unit "$value".'),
   );
 }
 
@@ -77,7 +86,8 @@ class MockDealRepository implements DealRepository {
             hubId: 'colon',
             title: '25kg Rice Sack — Split 5 ways',
             totalPrice: 900,
-            quantity: 1,
+            amount: 25,
+            unit: DealUnit.kg,
             category: DealCategory.grocery,
             availableSlots: 3,
             totalSlots: 5,
@@ -91,7 +101,8 @@ class MockDealRepository implements DealRepository {
             hubId: 'colon',
             title: 'Bottled Water Case (24pk)',
             totalPrice: 380,
-            quantity: 24,
+            amount: 24,
+            unit: DealUnit.bottles,
             category: DealCategory.drinks,
             availableSlots: 2,
             totalSlots: 4,
@@ -105,7 +116,8 @@ class MockDealRepository implements DealRepository {
             hubId: 'colon',
             title: 'Laundry Detergent 6L',
             totalPrice: 360,
-            quantity: 1,
+            amount: 6,
+            unit: DealUnit.litre,
             category: DealCategory.household,
             availableSlots: 0,
             totalSlots: 3,
@@ -121,7 +133,8 @@ class MockDealRepository implements DealRepository {
             hubId: 'magallanes',
             title: 'Egg Tray (30s) — Split 3 ways',
             totalPrice: 255,
-            quantity: 30,
+            amount: 30,
+            unit: DealUnit.pieces,
             category: DealCategory.grocery,
             availableSlots: 1,
             totalSlots: 3,
@@ -135,7 +148,8 @@ class MockDealRepository implements DealRepository {
             hubId: 'magallanes',
             title: '3-in-1 Coffee Bulk Pack',
             totalPrice: 900,
-            quantity: 60,
+            amount: 60,
+            unit: DealUnit.sachets,
             category: DealCategory.pantry,
             availableSlots: 4,
             totalSlots: 6,
@@ -163,7 +177,8 @@ class MockDealRepository implements DealRepository {
       description: draft.description,
       category: draft.category,
       totalPrice: draft.totalPrice,
-      quantity: draft.quantity,
+      amount: draft.amount,
+      unit: draft.unit,
       // The host is one of the students splitting the buy: "split 5 ways" means
       // them and four others. Mirrors the deals_set_available_slots trigger.
       availableSlots: draft.totalSlots - 1,
@@ -238,7 +253,9 @@ class SupabaseDealRepository implements DealRepository {
         'description': draft.description?.trim(),
         'category': draft.category.name,
         'total_price': draft.totalPrice,
-        'quantity': draft.quantity,
+        'amount': draft.amount,
+        // Stored by Dart name, as category is: 'litre', not 'L'.
+        'unit': draft.unit.name,
         'total_slots': draft.totalSlots,
         'pickup_location': draft.pickupLocation.trim(),
         'status': _statusValue(DealStatus.open),
@@ -259,9 +276,9 @@ class SupabaseDealRepository implements DealRepository {
     if (error.code == '23503') {
       return 'That hub no longer exists.';
     }
-    // 23514 = check_violation: the price/quantity/slot guards in the schema.
+    // 23514 = check_violation: the price/amount/slot guards in the schema.
     if (error.code == '23514') {
-      return 'Check the price, quantity and slots, then try again.';
+      return 'Check the price, amount and slots, then try again.';
     }
     return 'Could not publish the deal. Please try again.';
   }

@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/ui/split_board/create_deal_viewmodel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,26 +41,24 @@ void main() {
       expect(viewModel.validateTotalPrice('900.50'), isNull);
     });
 
-    test('requires a whole quantity of at least one', () {
-      expect(viewModel.validateQuantity('0'), 'Quantity must be at least 1.');
-      expect(
-        viewModel.validateQuantity('2.5'),
-        'Quantity must be a whole number.',
-      );
-      expect(viewModel.validateQuantity('24'), isNull);
-    });
-
     test('bounds the slot count at both ends', () {
       // One slot is not a split.
       expect(
-        viewModel.validateTotalSlots('1'),
+        viewModel.validateTotalSlots('1', amount: '25', unit: DealUnit.kg),
         'Slots must be at least $kMinDealSlots.',
       );
       expect(
-        viewModel.validateTotalSlots('${kMaxDealSlots + 1}'),
+        viewModel.validateTotalSlots(
+          '${kMaxDealSlots + 1}',
+          amount: '25',
+          unit: DealUnit.kg,
+        ),
         'Keep it to $kMaxDealSlots slots or fewer.',
       );
-      expect(viewModel.validateTotalSlots('5'), isNull);
+      expect(
+        viewModel.validateTotalSlots('5', amount: '25', unit: DealUnit.kg),
+        isNull,
+      );
     });
 
     test('rejects a deadline that has already passed', () {
@@ -110,7 +109,10 @@ void main() {
 
     test('a one-way split is not previewed, since submit would reject it', () {
       expect(viewModel.previewSplit(totalPrice: '900', totalSlots: '1'), isNull);
-      expect(viewModel.validateTotalSlots('1'), isNotNull);
+      expect(
+        viewModel.validateTotalSlots('1', amount: '25', unit: DealUnit.kg),
+        isNotNull,
+      );
     });
 
     test('a price under a centavo is rejected, not rounded up into one', () {
@@ -135,7 +137,8 @@ void main() {
         description: 'Baguio brand',
         category: DealCategory.pantry,
         totalPrice: 750,
-        quantity: 1,
+        amount: 5,
+        unit: DealUnit.litre,
         totalSlots: 5,
         pickupLocation: '  USJR Main Gate  ',
       ),
@@ -213,7 +216,8 @@ void main() {
       title: '25kg Rice Sack',
       category: DealCategory.grocery,
       totalPrice: 900,
-      quantity: 1,
+      amount: 25,
+      unit: DealUnit.kg,
       availableSlots: 7,
       totalSlots: 7,
       pickupLocation: 'USJR Main Gate',
@@ -231,6 +235,104 @@ void main() {
     );
     expect(viewModel.previewSplit(totalPrice: '900', totalSlots: '0'), isNull);
   });
+
+  test('rejects an amount that is not a positive number', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(viewModel.validateAmount('', DealUnit.kg), 'Enter the amount.');
+    expect(
+      viewModel.validateAmount('abc', DealUnit.kg),
+      'Amount must be a number.',
+    );
+    expect(
+      viewModel.validateAmount('0', DealUnit.kg),
+      'Amount must be more than 0.',
+    );
+    expect(viewModel.validateAmount('25', DealUnit.kg), isNull);
+  });
+
+  test('countable goods must come in whole numbers', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    // Half a bottle is not a thing you can buy.
+    expect(
+      viewModel.validateAmount('24.5', DealUnit.bottles),
+      'Bottles come in whole numbers.',
+    );
+    expect(viewModel.validateAmount('24', DealUnit.bottles), isNull);
+
+    // Weights and volumes are happy to be fractional.
+    expect(viewModel.validateAmount('25.5', DealUnit.kg), isNull);
+  });
+
+  test('refuses a slot count that cannot divide the goods', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    // 30 eggs across 4 slots is 7.5 eggs each, which nobody can collect.
+    expect(
+      viewModel.validateTotalSlots('4', amount: '30', unit: DealUnit.pieces),
+      '30 pieces across 4 slots leaves 7.5 each. Try 3 or 5 slots.',
+    );
+
+    // 5 works, and so does anything else that divides 30.
+    expect(
+      viewModel.validateTotalSlots('5', amount: '30', unit: DealUnit.pieces),
+      isNull,
+    );
+  });
+
+  test('a weight divides at any slot count', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(
+      viewModel.validateTotalSlots('7', amount: '25', unit: DealUnit.kg),
+      isNull,
+    );
+  });
+
+  test('says plainly when goods cannot be split at all', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(
+      viewModel.validateTotalSlots('2', amount: '1', unit: DealUnit.pieces),
+      'A single piece cannot be split.',
+    );
+  });
+
+  test('still enforces the slot bounds', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(
+      viewModel.validateTotalSlots('1', amount: '25', unit: DealUnit.kg),
+      'Slots must be at least $kMinDealSlots.',
+    );
+    expect(
+      viewModel.validateTotalSlots(
+        '${kMaxDealSlots + 1}',
+        amount: '25',
+        unit: DealUnit.kg,
+      ),
+      'Keep it to $kMaxDealSlots slots or fewer.',
+    );
+  });
+
+  test('previews what each student physically gets', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    final share = viewModel.previewShare(
+      amount: '25',
+      unit: DealUnit.kg,
+      totalSlots: '7',
+    );
+
+    expect(share, isNotNull);
+    expect(share!.shareLabel, '3.57 kg');
+
+    expect(
+      viewModel.previewShare(amount: '', unit: DealUnit.kg, totalSlots: '7'),
+      isNull,
+    );
+  });
 }
 
 const _draft = DealDraft(
@@ -238,7 +340,8 @@ const _draft = DealDraft(
   title: 'Cooking Oil 5L',
   category: DealCategory.pantry,
   totalPrice: 750,
-  quantity: 1,
+  amount: 5,
+  unit: DealUnit.litre,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
 );
