@@ -1,4 +1,5 @@
 import 'package:bulk_buying_companion/models/cost_split.dart';
+import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -64,5 +65,24 @@ void main() {
 
   test('rejects a split with no slots to split across', () {
     expect(() => CostSplit.from(totalPrice: 900, slots: 0), throwsArgumentError);
+  });
+
+  test('a deal that does not divide evenly rounds its share up', () {
+    final deal = Deal(
+      id: 'uneven',
+      hubId: 'colon',
+      title: '25kg Rice Sack',
+      category: DealCategory.grocery,
+      totalPrice: 900,
+      quantity: 1,
+      availableSlots: 7,
+      totalSlots: 7,
+      pickupLocation: 'USJR Main Gate',
+      status: DealStatus.open,
+    );
+
+    expect(deal.pricePerShare, 128.58);
+    expect(deal.priceLabel, 'P128.58/share');
+    expect(deal.costSplit.surplusCentavos, 6);
   });
 }

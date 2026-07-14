@@ -1,3 +1,5 @@
+import 'cost_split.dart';
+
 /// A bulk-buying deal posted within a hub.
 class Deal {
   const Deal({
@@ -51,7 +53,12 @@ class Deal {
   final DealStatus status;
   final DateTime? closesAt;
 
-  double get pricePerShare => totalPrice / totalSlots;
+  /// Every peso figure on a deal comes from here, so the card, the details
+  /// screen and the poster's preview cannot disagree with each other.
+  CostSplit get costSplit =>
+      CostSplit.from(totalPrice: totalPrice, slots: totalSlots);
+
+  double get pricePerShare => costSplit.pricePerShare;
 
   String get priceLabel => '${formatPeso(pricePerShare)}/share';
 
