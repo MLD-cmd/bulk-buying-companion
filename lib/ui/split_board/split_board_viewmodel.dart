@@ -147,11 +147,7 @@ class SplitBoardViewModel extends ChangeNotifier {
     return aDeadline.compareTo(bDeadline);
   }
 
-  double _priceValue(Deal deal) {
-    final match = RegExp(r'\d[\d,]*(?:\.\d+)?').firstMatch(deal.priceLabel);
-    final normalizedPrice = match?.group(0)?.replaceAll(',', '') ?? '';
-    return double.tryParse(normalizedPrice) ?? double.infinity;
-  }
+  double _priceValue(Deal deal) => deal.pricePerShare;
 }
 
 enum DealSortOption {
