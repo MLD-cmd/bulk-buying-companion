@@ -183,12 +183,19 @@ outright.
 Gains the stored facts and the derivation. `status` changes from a field to a
 getter:
 
+`participantCount` is **not** a new fact. Every claimed slot is a student in the
+buy, and the reserve/cancel RPCs move `available_slots` and the reservation rows
+in one transaction, so `totalSlots - availableSlots` *is* the participant count.
+Storing it separately would be a second copy of a number that already exists —
+exactly the drift this card is here to remove.
+
 ```dart
 final DateTime? purchasedAt;
 final DateTime? cancelledAt;
-final int participantCount;   // slots actually claimed
 final int paidCount;
 final int collectedCount;
+
+int get participantCount => totalSlots - availableSlots;
 
 DealStatus get status {
   if (cancelledAt != null) return DealStatus.cancelled;
@@ -335,8 +342,36 @@ where exists (
 
 `update` on `deals` is revoked from `authenticated`, and `deal_reservations` has
 no insert/update/delete policy at all. Every mutation is a security-definer
-function. Four are added, each returning `public.deals` so the caller gets the
-fresh row back — the same shape `reserve_slot` already uses.
+function. Four are added.
+
+**Every RPC returns the `deal_feed` row as `jsonb`, not `public.deals`.** The raw
+deals row has no paid or collected counts, so a Dart `Deal` built from it would
+report `paidCount: 0` and the badge would drop back to *Full* the moment the host
+marked someone paid. Returning the feed row means every mutation hands back a
+deal the app can render — the same shape `getDeals` already returns, through the
+same `dealFromRow`.
+
+`jsonb` rather than `returns public.deal_feed`: a function whose return type is a
+view's rowtype pins that view in place, and `deal_feed` has now been dropped and
+recreated twice (removing a column requires it). `jsonb` keeps the view free to
+change.
+
+This changes the return type of the two existing RPCs, so they must be
+`drop function`-ed and recreated — `create or replace` cannot change a return
+type — and re-granted.
+
+A shared helper keeps the shape in one place:
+
+```sql
+create or replace function public.deal_feed_row(p_deal_id uuid)
+returns jsonb
+language sql
+security definer
+set search_path = ''
+as $fn$
+  select to_jsonb(f) from public.deal_feed f where f.id = p_deal_id;
+$fn$;
+```
 
 **`set_participant_paid(p_deal_id uuid, p_user_id uuid, p_paid boolean)`**
 
@@ -344,9 +379,13 @@ fresh row back — the same shape `reserve_slot` already uses.
 |---|---|
 | not signed in | `28000` |
 | deal not found | `P0002` |
-| caller is not the host | `42501` |
+| caller is not the host | `P0012` |
 | deal is cancelled | `P0006` |
 | that student holds no slot | `P0005` |
+
+Host-only refusals raise `P0012`, not the canonical `42501`. `ReservationRepository`
+already maps `42501` to *"You can only reserve slots in your own hub"*, and one
+code cannot carry two meanings in one message table.
 
 Sets `paid_at = now()` when `p_paid`, `null` when not. Unmarking is allowed — a
 host who mis-taps must be able to take it back. Marking paid is allowed after
@@ -369,7 +408,7 @@ Nobody collects goods that do not exist yet.
 |---|---|
 | not signed in | `28000` |
 | deal not found | `P0002` |
-| caller is not the host | `42501` |
+| caller is not the host | `P0012` |
 | deal is cancelled | `P0006` |
 | already bought | `P0008` |
 
@@ -387,7 +426,7 @@ record that, not to argue.
 |---|---|
 | not signed in | `28000` |
 | deal not found | `P0002` |
-| caller is not the host | `42501` |
+| caller is not the host | `P0012` |
 | already cancelled | `P0009` |
 | deal is completed | `P0010` |
 
@@ -405,18 +444,21 @@ same rule Dart uses: bought, and every participant collected.
 
 ### Repositories
 
-Participant-level actions go to `ReservationRepository`, which already owns the
-per-student slot. Deal-level actions go to `DealRepository`.
+All four go on `ReservationRepository`, which already owns the per-student slot.
 
 ```dart
-// ReservationRepository
 Future<Deal> setPaid(String dealId, String userId, {required bool paid});
 Future<Deal> setCollected(String dealId, String userId, {required bool collected});
-
-// DealRepository
 Future<Deal> markPurchased(String dealId);
 Future<Deal> cancelDeal(String dealId);
 ```
+
+`markPurchased` and `cancelDeal` are deal-level and would sit more naturally on
+`DealRepository` — but they read and write the same state the mock holds for
+`reserveSlot`: one deal, one set of holders, one set of payments. Split across
+two repositories, `MockDealRepository` and `MockReservationRepository` would each
+hold their own copy of the deal and disagree the moment either changed it. One
+mock, one truth.
 
 Each has a Mock and a Supabase implementation, and each Supabase one calls the
 matching RPC through the existing gateway, mapping the errcodes above to
