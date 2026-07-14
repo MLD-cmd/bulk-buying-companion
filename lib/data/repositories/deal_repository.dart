@@ -10,6 +10,8 @@ import '../../models/deal_unit.dart';
 /// keep in step.
 Deal dealFromRow(Map<String, dynamic> row) {
   final closesAt = row['closes_at'] as String?;
+  final purchasedAt = row['purchased_at'] as String?;
+  final cancelledAt = row['cancelled_at'] as String?;
 
   return Deal(
     id: row['id'] as String,
@@ -27,8 +29,14 @@ Deal dealFromRow(Map<String, dynamic> row) {
     availableSlots: (row['available_slots'] as num).toInt(),
     totalSlots: (row['total_slots'] as num).toInt(),
     pickupLocation: row['pickup_location'] as String,
-    status: _dealStatusFromValue(row['status'] as String),
     closesAt: closesAt == null ? null : DateTime.parse(closesAt).toLocal(),
+    purchasedAt:
+        purchasedAt == null ? null : DateTime.parse(purchasedAt).toLocal(),
+    cancelledAt:
+        cancelledAt == null ? null : DateTime.parse(cancelledAt).toLocal(),
+    // Absent on the raw deals row an insert returns; deal_feed carries them.
+    paidCount: (row['paid_count'] as num?)?.toInt() ?? 0,
+    collectedCount: (row['collected_count'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -44,15 +52,6 @@ DealUnit _dealUnitFromValue(String value) {
     (unit) => unit.name == value,
     orElse: () => throw StateError('Unknown deal unit "$value".'),
   );
-}
-
-DealStatus _dealStatusFromValue(String value) {
-  return switch (value) {
-    'open' => DealStatus.open,
-    'filling_fast' => DealStatus.fillingFast,
-    'full' => DealStatus.full,
-    _ => throw StateError('Unknown deal status "$value".'),
-  };
 }
 
 /// Split Board deal-feed contract. Backed by [MockDealRepository] in tests and
@@ -92,7 +91,6 @@ class MockDealRepository implements DealRepository {
             availableSlots: 3,
             totalSlots: 5,
             pickupLocation: 'USJR Main Gate',
-            status: DealStatus.open,
             closesAt: DateTime(2026, 7, 16),
           ),
           Deal(
@@ -104,10 +102,9 @@ class MockDealRepository implements DealRepository {
             amount: 24,
             unit: DealUnit.bottles,
             category: DealCategory.drinks,
-            availableSlots: 2,
+            availableSlots: 1,
             totalSlots: 4,
             pickupLocation: 'Colon Street Hub',
-            status: DealStatus.fillingFast,
             closesAt: DateTime(2026, 7, 14),
           ),
           Deal(
@@ -122,7 +119,8 @@ class MockDealRepository implements DealRepository {
             availableSlots: 0,
             totalSlots: 3,
             pickupLocation: 'Barangay Hall Lobby',
-            status: DealStatus.full,
+            // Full, and still waiting on one student's money.
+            paidCount: 2,
             closesAt: DateTime(2026, 7, 18),
           ),
         ],
@@ -139,7 +137,6 @@ class MockDealRepository implements DealRepository {
             availableSlots: 1,
             totalSlots: 3,
             pickupLocation: 'Magallanes Residence Gate',
-            status: DealStatus.fillingFast,
             closesAt: DateTime(2026, 7, 15),
           ),
           Deal(
@@ -154,7 +151,6 @@ class MockDealRepository implements DealRepository {
             availableSlots: 4,
             totalSlots: 6,
             pickupLocation: 'Tower A Lobby',
-            status: DealStatus.open,
             closesAt: DateTime(2026, 7, 19),
           ),
         ],
@@ -184,7 +180,9 @@ class MockDealRepository implements DealRepository {
       availableSlots: draft.totalSlots - 1,
       totalSlots: draft.totalSlots,
       pickupLocation: draft.pickupLocation.trim(),
-      status: DealStatus.open,
+      // A new deal has exactly one participant, the host, and the host's slot is
+      // paid from the moment it exists — they cannot pay themselves.
+      paidCount: 1,
       closesAt: draft.closesAt,
     );
 
@@ -258,7 +256,6 @@ class SupabaseDealRepository implements DealRepository {
         'unit': draft.unit.name,
         'total_slots': draft.totalSlots,
         'pickup_location': draft.pickupLocation.trim(),
-        'status': _statusValue(DealStatus.open),
         'closes_at': draft.closesAt?.toIso8601String(),
       });
       return dealFromRow(row);
@@ -281,13 +278,5 @@ class SupabaseDealRepository implements DealRepository {
       return 'Check the price, amount and slots, then try again.';
     }
     return 'Could not publish the deal. Please try again.';
-  }
-
-  String _statusValue(DealStatus status) {
-    return switch (status) {
-      DealStatus.open => 'open',
-      DealStatus.fillingFast => 'filling_fast',
-      DealStatus.full => 'full',
-    };
   }
 }

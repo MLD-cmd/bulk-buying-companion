@@ -21,7 +21,6 @@ void main() {
             'available_slots': 3,
             'total_slots': 5,
             'pickup_location': 'USJR Main Gate',
-            'status': 'open',
             'closes_at': '2026-07-16T15:59:00.000Z',
             'created_by': 'user-9',
             'host_name': 'Marco Villanueva',
@@ -61,7 +60,6 @@ void main() {
             'available_slots': 5,
             'total_slots': 5,
             'pickup_location': 'USJR Main Gate',
-            'status': 'open',
             'host_name': null,
           },
         ],
@@ -101,7 +99,9 @@ void main() {
     expect(gateway.insertedValues!['category'], 'pantry');
     expect(gateway.insertedValues!['amount'], 5);
     expect(gateway.insertedValues!['unit'], 'litre');
-    expect(gateway.insertedValues!['status'], 'open');
+    // status is not sent either: it is derived from the deal's facts, and the
+    // column it used to be written to is going away.
+    expect(gateway.insertedValues!.containsKey('status'), isFalse);
     // available_slots is not sent -- the deals_set_available_slots trigger
     // owns that column, seating the host in one of the slots.
     expect(gateway.insertedValues!.containsKey('available_slots'), isFalse);

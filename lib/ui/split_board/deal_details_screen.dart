@@ -61,7 +61,7 @@ class DealDetailsScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      _StatusBadge(status: deal.status),
+                      _StatusBadge(deal: deal),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -513,21 +513,41 @@ class _Pill extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
+  const _StatusBadge({required this.deal});
 
-  final DealStatus status;
+  final Deal deal;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final (background, foreground) = switch (status) {
-      DealStatus.open => (const Color(0xFFDCEFE3), const Color(0xFF173E28)),
-      DealStatus.fillingFast => (
-        const Color(0xFFFDECC8),
-        const Color(0xFF6B4A00),
-      ),
-      DealStatus.full => (const Color(0xFFF3D6D6), const Color(0xFF6B1D1D)),
-    };
+    final (background, foreground) = deal.isFillingFast
+        ? (const Color(0xFFFDECC8), const Color(0xFF6B4A00))
+        : switch (deal.status) {
+            DealStatus.open => (
+              const Color(0xFFDCEFE3),
+              const Color(0xFF173E28),
+            ),
+            DealStatus.full => (
+              const Color(0xFFFDECC8),
+              const Color(0xFF6B4A00),
+            ),
+            DealStatus.readyToPurchase => (
+              const Color(0xFFDDE7F7),
+              const Color(0xFF1B3A66),
+            ),
+            DealStatus.readyForPickup => (
+              const Color(0xFFDDE7F7),
+              const Color(0xFF1B3A66),
+            ),
+            DealStatus.completed => (
+              const Color(0xFFE6E6E1),
+              const Color(0xFF3D3D38),
+            ),
+            DealStatus.cancelled => (
+              const Color(0xFFF3D6D6),
+              const Color(0xFF6B1D1D),
+            ),
+          };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -536,7 +556,7 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        status.label,
+        deal.statusLabel,
         style: theme.textTheme.labelSmall?.copyWith(
           fontWeight: FontWeight.w800,
           color: foreground,

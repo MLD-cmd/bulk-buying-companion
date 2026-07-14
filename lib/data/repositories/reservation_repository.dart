@@ -178,7 +178,7 @@ class MockReservationRepository implements ReservationRepository {
     }
 
     _holders.add(currentUserId);
-    _deal = _copyWithSlots(_deal.availableSlots - 1);
+    _deal = _deal.copyWith(availableSlots: _deal.availableSlots - 1);
     return _deal;
   }
 
@@ -199,27 +199,7 @@ class MockReservationRepository implements ReservationRepository {
       throw const ReservationFailure('You do not have a slot in this deal.');
     }
 
-    _deal = _copyWithSlots(_deal.availableSlots + 1);
+    _deal = _deal.copyWith(availableSlots: _deal.availableSlots + 1);
     return _deal;
-  }
-
-  Deal _copyWithSlots(int availableSlots) {
-    return Deal(
-      id: _deal.id,
-      hubId: _deal.hubId,
-      title: _deal.title,
-      description: _deal.description,
-      createdBy: _deal.createdBy,
-      hostName: _deal.hostName,
-      category: _deal.category,
-      totalPrice: _deal.totalPrice,
-      amount: _deal.amount,
-      unit: _deal.unit,
-      availableSlots: availableSlots,
-      totalSlots: _deal.totalSlots,
-      pickupLocation: _deal.pickupLocation,
-      status: _deal.status,
-      closesAt: _deal.closesAt,
-    );
   }
 }

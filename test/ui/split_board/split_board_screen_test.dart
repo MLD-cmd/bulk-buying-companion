@@ -97,7 +97,6 @@ class _StubDeal extends Deal {
         availableSlots: 1,
         totalSlots: 4,
         pickupLocation: 'Campus Gate',
-        status: DealStatus.open,
       );
 }
 

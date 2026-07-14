@@ -15,11 +15,14 @@ class Deal {
     required this.availableSlots,
     required this.totalSlots,
     required this.pickupLocation,
-    required this.status,
     this.description,
     this.closesAt,
     this.createdBy,
     this.hostName,
+    this.purchasedAt,
+    this.cancelledAt,
+    this.paidCount = 0,
+    this.collectedCount = 0,
   });
 
   final String id;
@@ -55,8 +58,18 @@ class Deal {
   final int availableSlots;
   final int totalSlots;
   final String pickupLocation;
-  final DealStatus status;
   final DateTime? closesAt;
+
+  /// The host has bought the goods. Set by mark_purchased; never cleared.
+  final DateTime? purchasedAt;
+
+  /// The host called the deal off. Set by cancel_deal; never cleared.
+  final DateTime? cancelledAt;
+
+  /// How many of the students in this deal have handed the host their share,
+  /// and how many have taken their goods away. Both come from deal_feed.
+  final int paidCount;
+  final int collectedCount;
 
   /// Every peso figure on a deal comes from here, so the card, the details
   /// screen and the poster's preview cannot disagree with each other.
@@ -73,6 +86,79 @@ class Deal {
       PhysicalShare.from(amount: amount, unit: unit, slots: totalSlots);
 
   double get pricePerShare => costSplit.pricePerShare;
+
+  /// Every claimed slot is a student in the buy. The reserve/cancel RPCs move
+  /// available_slots and the reservation rows together in one transaction, so
+  /// this cannot drift — and storing it separately would be a second copy of a
+  /// number that already exists.
+  int get participantCount => totalSlots - availableSlots;
+
+  /// Derived, never stored. The column this replaces was updated by nothing, so
+  /// a full deal still showed an "Open" badge. Here there is no second copy to
+  /// keep in step: a student leaving a ready-to-purchase deal reopens it with no
+  /// code path written to make that happen.
+  DealStatus get status {
+    if (cancelledAt != null) return DealStatus.cancelled;
+
+    if (purchasedAt != null) {
+      // Purchase gates both, so goods that were never bought cannot be reported
+      // as collected.
+      return participantCount > 0 && collectedCount >= participantCount
+          ? DealStatus.completed
+          : DealStatus.readyForPickup;
+    }
+
+    if (availableSlots == 0) {
+      return participantCount > 0 && paidCount >= participantCount
+          ? DealStatus.readyToPurchase
+          : DealStatus.full;
+    }
+
+    return DealStatus.open;
+  }
+
+  /// A label on an open deal that is nearly full, not a state of its own.
+  bool get isFillingFast =>
+      status == DealStatus.open && availableSlots * 4 <= totalSlots;
+
+  /// What the badge reads.
+  String get statusLabel => isFillingFast ? 'Filling fast' : status.label;
+
+  /// The host's own slot is marked paid the moment the deal exists — they
+  /// cannot pay themselves — so it is not money they are holding for anyone.
+  int get studentsWhoPaid => (paidCount - 1).clamp(0, totalSlots);
+
+  /// What the host would have to hand back if they cancelled now.
+  double get amountHeld => studentsWhoPaid * pricePerShare;
+
+  Deal copyWith({
+    int? availableSlots,
+    DateTime? purchasedAt,
+    DateTime? cancelledAt,
+    int? paidCount,
+    int? collectedCount,
+  }) {
+    return Deal(
+      id: id,
+      hubId: hubId,
+      title: title,
+      description: description,
+      createdBy: createdBy,
+      hostName: hostName,
+      category: category,
+      totalPrice: totalPrice,
+      amount: amount,
+      unit: unit,
+      availableSlots: availableSlots ?? this.availableSlots,
+      totalSlots: totalSlots,
+      pickupLocation: pickupLocation,
+      closesAt: closesAt,
+      purchasedAt: purchasedAt ?? this.purchasedAt,
+      cancelledAt: cancelledAt ?? this.cancelledAt,
+      paidCount: paidCount ?? this.paidCount,
+      collectedCount: collectedCount ?? this.collectedCount,
+    );
+  }
 
   String get priceLabel => '${formatPeso(pricePerShare)}/share';
 
@@ -142,10 +228,18 @@ enum DealCategory {
 
 enum DealStatus {
   open('Open'),
-  fillingFast('Filling fast'),
-  full('Full');
+  full('Full'),
+  readyToPurchase('Ready to purchase'),
+  readyForPickup('Ready for pickup'),
+  completed('Completed'),
+  cancelled('Cancelled');
 
   const DealStatus(this.label);
 
   final String label;
+
+  /// Completed and cancelled deals are not open business. The Split Board hides
+  /// them unless they are asked for by name.
+  bool get isFinished =>
+      this == DealStatus.completed || this == DealStatus.cancelled;
 }

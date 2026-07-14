@@ -103,19 +103,18 @@ void main() {
             id: 'a',
             title: 'Rice Sack',
             category: DealCategory.grocery,
-            status: DealStatus.open,
           ),
           _StubDeal(
             id: 'b',
             title: 'Laundry Detergent',
             category: DealCategory.household,
-            status: DealStatus.full,
+            availableSlots: 0,
           ),
           _StubDeal(
             id: 'c',
             title: 'Water Case',
             category: DealCategory.grocery,
-            status: DealStatus.full,
+            availableSlots: 0,
           ),
         ],
       }),
@@ -129,6 +128,30 @@ void main() {
 
     expect(viewModel.filteredDeals, hasLength(1));
     expect(viewModel.filteredDeals.single.title, 'Water Case');
+  });
+
+  test('hides finished deals unless they are asked for by name', () async {
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository({
+        'colon': [
+          const _StubDeal(id: 'a', title: 'Rice Sack'),
+          _StubDeal(
+            id: 'b',
+            title: 'Water Case',
+            cancelledAt: DateTime(2026, 7, 16),
+          ),
+        ],
+      }),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+    await Future<void>.value();
+
+    expect(viewModel.filteredDeals.map((deal) => deal.id), ['a']);
+
+    viewModel.updateStatusFilter(DealStatus.cancelled);
+
+    expect(viewModel.filteredDeals.map((deal) => deal.id), ['b']);
   });
 
   test('sorts loaded deals by deadline or price', () async {
@@ -195,7 +218,6 @@ void main() {
             availableSlots: 1,
             totalSlots: 3,
             pickupLocation: 'Campus Gate',
-            status: DealStatus.open,
           ),
           const Deal(
             id: 'quarters',
@@ -208,7 +230,6 @@ void main() {
             availableSlots: 1,
             totalSlots: 4,
             pickupLocation: 'Campus Gate',
-            status: DealStatus.open,
           ),
         ],
       }),
@@ -237,7 +258,6 @@ void main() {
       availableSlots: 4,
       totalSlots: 5,
       pickupLocation: 'Campus Gate',
-      status: DealStatus.open,
     );
     final viewModel = SplitBoardViewModel(
       dealRepository: _FakeDealRepository({
@@ -260,7 +280,6 @@ void main() {
         availableSlots: 3,
         totalSlots: 5,
         pickupLocation: 'Campus Gate',
-        status: DealStatus.open,
       ),
     );
 
@@ -276,13 +295,16 @@ class _StubDeal extends Deal {
     required super.title,
     super.category = DealCategory.grocery,
     super.totalPrice = 400,
-    super.status = DealStatus.open,
+    // Two of four slots left, so the stubs stay Open and these tests stay about
+    // sorting and filtering. One of four is a quarter, which would make every
+    // stub read "Filling fast".
+    super.availableSlots = 2,
+    super.cancelledAt,
     super.closesAt,
   }) : super(
          hubId: 'colon',
          amount: 1,
          unit: DealUnit.kg,
-         availableSlots: 1,
          totalSlots: 4,
          pickupLocation: 'Campus Gate',
        );

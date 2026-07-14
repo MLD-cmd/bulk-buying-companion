@@ -175,7 +175,6 @@ final _deal = Deal(
   availableSlots: 3,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
-  status: DealStatus.open,
   closesAt: DateTime(2026, 7, 16),
 );
 
@@ -191,7 +190,6 @@ const _bulk = Deal(
   availableSlots: 2,
   totalSlots: 4,
   pickupLocation: 'Colon Street Hub',
-  status: DealStatus.fillingFast,
 );
 
 /// A deal whose host has no profile row — the left join in deal_feed returns
@@ -207,7 +205,6 @@ const _hostless = Deal(
   availableSlots: 5,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
-  status: DealStatus.open,
 );
 
 const _uneven = Deal(
@@ -222,7 +219,6 @@ const _uneven = Deal(
   availableSlots: 3,
   totalSlots: 7,
   pickupLocation: 'USJR Main Gate',
-  status: DealStatus.open,
 );
 
 const _full = Deal(
@@ -237,7 +233,6 @@ const _full = Deal(
   availableSlots: 0,
   totalSlots: 3,
   pickupLocation: 'Barangay Hall Lobby',
-  status: DealStatus.full,
 );
 
 /// Used by the reservation tests: needs a real [createdBy] so the host rules
@@ -255,5 +250,4 @@ const _reservableDeal = Deal(
   availableSlots: 3,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
-  status: DealStatus.open,
 );

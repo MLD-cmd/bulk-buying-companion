@@ -87,7 +87,6 @@ void main() {
       availableSlots: 7,
       totalSlots: 7,
       pickupLocation: 'USJR Main Gate',
-      status: DealStatus.open,
     );
 
     expect(deal.pricePerShare, 128.58);
@@ -136,7 +135,6 @@ void main() {
       availableSlots: 0,
       totalSlots: 0,
       pickupLocation: 'USJR Main Gate',
-      status: DealStatus.open,
     );
     const noPrice = Deal(
       id: 'no-price',
@@ -149,7 +147,6 @@ void main() {
       availableSlots: 5,
       totalSlots: 5,
       pickupLocation: 'USJR Main Gate',
-      status: DealStatus.open,
     );
 
     expect(() => noSlots.pricePerShare, returnsNormally);

@@ -221,7 +221,6 @@ void main() {
       availableSlots: 7,
       totalSlots: 7,
       pickupLocation: 'USJR Main Gate',
-      status: DealStatus.open,
     );
     expect(published.pricePerShare, split.pricePerShare);
   });

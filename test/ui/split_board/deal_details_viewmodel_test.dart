@@ -90,7 +90,6 @@ DealDetailsViewModel _viewModel({
     availableSlots: availableSlots,
     totalSlots: 5,
     pickupLocation: 'USJR Main Gate',
-    status: DealStatus.open,
   );
 
   return DealDetailsViewModel(

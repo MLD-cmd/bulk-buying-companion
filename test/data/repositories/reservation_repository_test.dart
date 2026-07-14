@@ -208,7 +208,6 @@ Deal _deal({required int availableSlots}) => Deal(
   availableSlots: availableSlots,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
-  status: DealStatus.open,
 );
 
 class _StubGateway implements SupabaseReservationGateway {
