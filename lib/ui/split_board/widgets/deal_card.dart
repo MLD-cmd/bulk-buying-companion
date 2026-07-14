@@ -64,6 +64,12 @@ class DealCard extends StatelessWidget {
                         color: theme.colorScheme.primary,
                       ),
                     ),
+                    Text(
+                      '${deal.physicalShare.shareLabel} each',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),

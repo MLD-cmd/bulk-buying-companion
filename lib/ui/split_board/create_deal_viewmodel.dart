@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../../data/repositories/deal_repository.dart';
 import '../../models/cost_split.dart';
 import '../../models/deal.dart';
+import '../../models/deal_unit.dart';
+import '../../models/physical_share.dart';
 
 /// A split with one share is not a split, and past a certain point the shares
 /// get too small to be worth collecting. Bounds the slot count both ways.
@@ -58,10 +60,31 @@ class CreateDealViewModel extends ChangeNotifier {
     return null;
   }
 
-  String? validateQuantity(String? value) =>
-      _validateWholeNumber(value, label: 'Quantity', min: 1);
+  String? validateAmount(String? value, DealUnit unit) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Enter the amount.';
 
-  String? validateTotalSlots(String? value) {
+    final parsed = double.tryParse(text);
+    if (parsed == null || !parsed.isFinite) return 'Amount must be a number.';
+    if (parsed <= 0) return 'Amount must be more than 0.';
+
+    // You cannot buy half a bottle. Weights and volumes are happy to be
+    // fractional; countable things are not.
+    if (unit.discrete && parsed != parsed.roundToDouble()) {
+      final noun = unit.label[0].toUpperCase() + unit.label.substring(1);
+      return '$noun come in whole numbers.';
+    }
+    return null;
+  }
+
+  /// The slot count is only meaningful against the goods being split, so this
+  /// takes them too. Flutter validators are closures, so the screen can hand
+  /// over the other fields and the error still lands on the slots field.
+  String? validateTotalSlots(
+    String? value, {
+    required String? amount,
+    required DealUnit unit,
+  }) {
     final error = _validateWholeNumber(
       value,
       label: 'Slots',
@@ -76,7 +99,51 @@ class CreateDealViewModel extends ChangeNotifier {
     if (slots > kMaxDealSlots) {
       return 'Keep it to $kMaxDealSlots slots or fewer.';
     }
-    return null;
+
+    // Without a usable amount there is nothing to divide yet; the amount field
+    // is already complaining, and two errors for one mistake helps nobody.
+    final parsedAmount = double.tryParse((amount ?? '').trim());
+    if (parsedAmount == null || !parsedAmount.isFinite || parsedAmount <= 0) {
+      return null;
+    }
+
+    final share = PhysicalShare.from(
+      amount: parsedAmount,
+      unit: unit,
+      slots: slots,
+    );
+    if (share.dividesEvenly) return null;
+
+    if (!share.canBeSplit) {
+      return 'A single ${unit.singularLabel} cannot be split.';
+    }
+
+    return '${share.totalLabel} across $slots slots leaves '
+        '${_trimmed(share.amountPerShare)} each. '
+        'Try ${_suggest(share.workableSlotCounts, slots)}.';
+  }
+
+  /// The nearest workable counts either side of what the poster typed. Naming
+  /// every divisor of 60 would be a wall of numbers, not a suggestion.
+  String _suggest(List<int> workable, int wanted) {
+    int? below;
+    int? above;
+    for (final count in workable) {
+      if (count < wanted) below = count;
+      if (count > wanted && above == null) above = count;
+    }
+
+    final options = [?below, ?above];
+    if (options.isEmpty) return '${workable.first} slots';
+    if (options.length == 1) return '${options.first} slots';
+    return '${options.first} or ${options.last} slots';
+  }
+
+  /// 7.5, not 7.50; 6, not 6.0.
+  String _trimmed(double value) {
+    return value == value.roundToDouble()
+        ? value.round().toString()
+        : value.toString();
   }
 
   String? validatePickupLocation(String? value) {
@@ -127,6 +194,23 @@ class CreateDealViewModel extends ChangeNotifier {
     // validateTotalSlots then rejects on submit.
     if (slots < kMinDealSlots || slots > kMaxDealSlots) return null;
     return CostSplit.from(totalPrice: price, slots: slots);
+  }
+
+  /// What each student physically receives, shown live beside what they pay.
+  /// Null — never an exception — while the inputs are unusable: this runs on
+  /// every keystroke from inside build.
+  PhysicalShare? previewShare({
+    required String? amount,
+    required DealUnit unit,
+    required String? totalSlots,
+  }) {
+    final parsedAmount = double.tryParse((amount ?? '').trim());
+    final slots = int.tryParse((totalSlots ?? '').trim());
+    if (parsedAmount == null || slots == null) return null;
+    if (!parsedAmount.isFinite || parsedAmount <= 0) return null;
+    if (slots < kMinDealSlots || slots > kMaxDealSlots) return null;
+
+    return PhysicalShare.from(amount: parsedAmount, unit: unit, slots: slots);
   }
 
   /// Returns the published deal, or null when it was rejected. The reason is

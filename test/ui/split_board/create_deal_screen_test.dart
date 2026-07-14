@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/ui/split_board/create_deal_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -37,7 +38,8 @@ void main() {
     WidgetTester tester, {
     String title = 'Cooking Oil 5L',
     String totalPrice = '750',
-    String quantity = '1',
+    String amount = '1',
+    DealUnit? unit,
     String totalSlots = '5',
     String pickupLocation = 'USJR Main Gate',
   }) async {
@@ -47,9 +49,15 @@ void main() {
       totalPrice,
     );
     await tester.enterText(
-      find.byKey(const Key('deal-quantity-field')),
-      quantity,
+      find.byKey(const Key('deal-amount-field')),
+      amount,
     );
+    if (unit != null) {
+      final chip = find.byKey(Key('deal-unit-${unit.name}'));
+      await tester.ensureVisible(chip);
+      await tester.tap(chip);
+      await tester.pump();
+    }
     await tester.enterText(
       find.byKey(const Key('deal-total-slots-field')),
       totalSlots,
@@ -174,6 +182,66 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Post a deal'), findsOneWidget);
+  });
+
+  testWidgets('shows what each student physically gets', (tester) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    await fillForm(tester, totalPrice: '900', amount: '25', totalSlots: '7');
+
+    expect(find.text('Each student pays P128.58'), findsOneWidget);
+    expect(find.byKey(const Key('deal-share-preview')), findsOneWidget);
+    expect(find.text('Each student gets 3.57 kg'), findsOneWidget);
+  });
+
+  testWidgets('refuses goods that will not divide, and names what will', (
+    tester,
+  ) async {
+    final repository = _RecordingDealRepository();
+    await pumpScreen(tester, repository);
+
+    await fillForm(
+      tester,
+      totalPrice: '255',
+      amount: '30',
+      unit: DealUnit.pieces,
+      totalSlots: '4',
+    );
+    await submit(tester);
+
+    expect(
+      find.text('30 pieces across 4 slots leaves 7.5 each. Try 3 or 5 slots.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the refusal clears as soon as the slot count is corrected', (
+    tester,
+  ) async {
+    await pumpScreen(tester, _RecordingDealRepository());
+
+    await fillForm(
+      tester,
+      totalPrice: '240',
+      amount: '30',
+      unit: DealUnit.pieces,
+      totalSlots: '4',
+    );
+    await submit(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('deal-total-slots-field')),
+      '5',
+    );
+    await tester.pump();
+
+    // Otherwise the stale refusal sits directly above a preview that already
+    // says the goods divide, and the poster is told both at once.
+    expect(
+      find.text('30 pieces across 4 slots leaves 7.5 each. Try 3 or 5 slots.'),
+      findsNothing,
+    );
+    expect(find.text('Each student gets 6 pieces'), findsOneWidget);
   });
 }
 

@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,7 +16,8 @@ void main() {
             'description': 'Sinandomeng',
             'category': 'grocery',
             'total_price': 900,
-            'quantity': 1,
+            'amount': 25,
+            'unit': 'kg',
             'available_slots': 3,
             'total_slots': 5,
             'pickup_location': 'USJR Main Gate',
@@ -54,7 +56,8 @@ void main() {
             'title': 'Cooking Oil 5L',
             'category': 'pantry',
             'total_price': 750,
-            'quantity': 1,
+            'amount': 5,
+            'unit': 'litre',
             'available_slots': 5,
             'total_slots': 5,
             'pickup_location': 'USJR Main Gate',
@@ -85,7 +88,8 @@ void main() {
         title: 'Cooking Oil 5L',
         category: DealCategory.pantry,
         totalPrice: 750,
-        quantity: 1,
+        amount: 5,
+        unit: DealUnit.litre,
         totalSlots: 5,
         pickupLocation: 'USJR Main Gate',
       ),
@@ -95,6 +99,8 @@ void main() {
     // carry the current user's id or the database refuses it.
     expect(gateway.insertedValues!['created_by'], 'user-1');
     expect(gateway.insertedValues!['category'], 'pantry');
+    expect(gateway.insertedValues!['amount'], 5);
+    expect(gateway.insertedValues!['unit'], 'litre');
     expect(gateway.insertedValues!['status'], 'open');
     // available_slots is not sent -- the deals_set_available_slots trigger
     // owns that column, seating the host in one of the slots.
@@ -143,7 +149,7 @@ void main() {
         isA<DealFailure>().having(
           (failure) => failure.message,
           'message',
-          'Check the price, quantity and slots, then try again.',
+          'Check the price, amount and slots, then try again.',
         ),
       ),
     );
@@ -155,7 +161,8 @@ const _draft = DealDraft(
   title: 'Cooking Oil 5L',
   category: DealCategory.pantry,
   totalPrice: 750,
-  quantity: 1,
+  amount: 5,
+  unit: DealUnit.litre,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
 );

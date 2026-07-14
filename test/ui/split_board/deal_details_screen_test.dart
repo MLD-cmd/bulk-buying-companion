@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/ui/split_board/deal_details_screen.dart';
 import 'package:bulk_buying_companion/ui/split_board/deal_details_viewmodel.dart';
 import 'package:flutter/material.dart';
@@ -48,7 +49,7 @@ void main() {
     expect(find.text('25kg Rice Sack'), findsOneWidget);
     expect(find.text('Sinandomeng, from the Carbon market'), findsOneWidget);
     expect(find.text('Grocery'), findsOneWidget);
-    expect(find.text('1 unit'), findsOneWidget);
+    expect(find.text('1 kg'), findsOneWidget);
 
     // Host information.
     expect(find.text('Marco Villanueva'), findsOneWidget);
@@ -70,10 +71,12 @@ void main() {
     expect(find.text('Reserve a slot'), findsOneWidget);
   });
 
-  testWidgets('pluralises the unit count', (tester) async {
+  testWidgets('shows the whole buy on the pill, not a meaningless unit count', (
+    tester,
+  ) async {
     await pumpDetails(tester, _bulk);
 
-    expect(find.text('24 units'), findsOneWidget);
+    expect(find.text('24 bottles'), findsOneWidget);
   });
 
   testWidgets('names a host with no profile rather than leaving a gap', (
@@ -107,6 +110,17 @@ void main() {
 
     expect(find.text('P128.58'), findsOneWidget);
     expect(find.byKey(const Key('detail-split-surplus')), findsOneWidget);
+  });
+
+  testWidgets('shows what a student receives, not just what they pay', (
+    tester,
+  ) async {
+    await pumpDetails(tester, _uneven);
+
+    // The whole buy — not "1 unit".
+    expect(find.text('25 kg'), findsOneWidget);
+    expect(find.byKey(const Key('detail-physical-share')), findsOneWidget);
+    expect(find.text('3.57 kg'), findsOneWidget);
   });
 
   testWidgets('says nothing about surplus on an even split', (tester) async {
@@ -156,7 +170,8 @@ final _deal = Deal(
   hostName: 'Marco Villanueva',
   category: DealCategory.grocery,
   totalPrice: 900,
-  quantity: 1,
+  amount: 1,
+  unit: DealUnit.kg,
   availableSlots: 3,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
@@ -171,7 +186,8 @@ const _bulk = Deal(
   hostName: 'Bea Alonzo',
   category: DealCategory.drinks,
   totalPrice: 380,
-  quantity: 24,
+  amount: 24,
+  unit: DealUnit.bottles,
   availableSlots: 2,
   totalSlots: 4,
   pickupLocation: 'Colon Street Hub',
@@ -186,7 +202,8 @@ const _hostless = Deal(
   title: 'Cooking Oil 5L',
   category: DealCategory.pantry,
   totalPrice: 750,
-  quantity: 1,
+  amount: 1,
+  unit: DealUnit.kg,
   availableSlots: 5,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
@@ -200,7 +217,8 @@ const _uneven = Deal(
   hostName: 'Marco Villanueva',
   category: DealCategory.grocery,
   totalPrice: 900,
-  quantity: 1,
+  amount: 25,
+  unit: DealUnit.kg,
   availableSlots: 3,
   totalSlots: 7,
   pickupLocation: 'USJR Main Gate',
@@ -214,7 +232,8 @@ const _full = Deal(
   hostName: 'Rey Mercado',
   category: DealCategory.household,
   totalPrice: 360,
-  quantity: 1,
+  amount: 1,
+  unit: DealUnit.kg,
   availableSlots: 0,
   totalSlots: 3,
   pickupLocation: 'Barangay Hall Lobby',
@@ -231,7 +250,8 @@ const _reservableDeal = Deal(
   hostName: 'Marco Villanueva',
   category: DealCategory.grocery,
   totalPrice: 900,
-  quantity: 1,
+  amount: 1,
+  unit: DealUnit.kg,
   availableSlots: 3,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',

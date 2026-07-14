@@ -1,5 +1,6 @@
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/ui/split_board/split_board_viewmodel.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -189,7 +190,8 @@ void main() {
             title: 'Thirds Deal',
             category: DealCategory.grocery,
             totalPrice: 100,
-            quantity: 1,
+            amount: 1,
+            unit: DealUnit.kg,
             availableSlots: 1,
             totalSlots: 3,
             pickupLocation: 'Campus Gate',
@@ -201,7 +203,8 @@ void main() {
             title: 'Quarters Deal',
             category: DealCategory.grocery,
             totalPrice: 100,
-            quantity: 1,
+            amount: 1,
+            unit: DealUnit.kg,
             availableSlots: 1,
             totalSlots: 4,
             pickupLocation: 'Campus Gate',
@@ -229,7 +232,8 @@ void main() {
       title: 'Rice Sack',
       category: DealCategory.grocery,
       totalPrice: 400,
-      quantity: 1,
+      amount: 1,
+      unit: DealUnit.kg,
       availableSlots: 4,
       totalSlots: 5,
       pickupLocation: 'Campus Gate',
@@ -251,7 +255,8 @@ void main() {
         title: 'Rice Sack',
         category: DealCategory.grocery,
         totalPrice: 400,
-        quantity: 1,
+        amount: 1,
+        unit: DealUnit.kg,
         availableSlots: 3,
         totalSlots: 5,
         pickupLocation: 'Campus Gate',
@@ -275,7 +280,8 @@ class _StubDeal extends Deal {
     super.closesAt,
   }) : super(
          hubId: 'colon',
-         quantity: 1,
+         amount: 1,
+         unit: DealUnit.kg,
          availableSlots: 1,
          totalSlots: 4,
          pickupLocation: 'Campus Gate',

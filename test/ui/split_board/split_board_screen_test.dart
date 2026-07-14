@@ -2,6 +2,7 @@ import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/ui/split_board/split_board_screen.dart';
 import 'package:bulk_buying_companion/ui/split_board/split_board_viewmodel.dart';
 import 'package:flutter/material.dart';
@@ -90,7 +91,8 @@ class _StubDeal extends Deal {
         hubId: 'colon',
         // P400 over 4 slots renders as 'P100/share'.
         totalPrice: 400,
-        quantity: 1,
+        amount: 1,
+        unit: DealUnit.kg,
         category: DealCategory.grocery,
         availableSlots: 1,
         totalSlots: 4,
