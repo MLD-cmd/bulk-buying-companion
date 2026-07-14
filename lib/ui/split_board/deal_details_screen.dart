@@ -1,127 +1,189 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/reservation_repository.dart';
 import '../../models/deal.dart';
+import '../../models/reservation.dart';
 import '../shared/app_theme.dart';
+import 'deal_details_viewmodel.dart';
 
 /// Everything a student needs before committing money to a bulk buy: what it
 /// is, who is organising it, what their share costs, whether there is room
 /// left, and where to collect it.
 class DealDetailsScreen extends StatelessWidget {
-  const DealDetailsScreen({super.key, required this.deal});
+  const DealDetailsScreen({super.key});
 
-  final Deal deal;
-
-  static Route<void> route(Deal deal) {
-    return MaterialPageRoute<void>(
-      builder: (context) => DealDetailsScreen(deal: deal),
+  /// Pops with the deal as it stands after any slot change, so the Split Board
+  /// can show the new count instead of the one it pushed with.
+  static Route<Deal> route(Deal deal) {
+    return MaterialPageRoute<Deal>(
+      builder: (context) => ChangeNotifierProvider(
+        create: (context) => DealDetailsViewModel(
+          reservationRepository: context.read<ReservationRepository>(),
+          deal: deal,
+          currentUserId: context.read<AuthRepository>().currentUser?.uid,
+        ),
+        child: const DealDetailsScreen(),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isFull = deal.availableSlots == 0;
+    return Consumer<DealDetailsViewModel>(
+      builder: (context, viewModel, _) {
+        final theme = Theme.of(context);
+        final deal = viewModel.deal;
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Deal details')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    deal.title,
-                    key: const Key('detail-title'),
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      height: 1.25,
-                    ),
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) Navigator.of(context).pop(viewModel.deal);
+          },
+          child: Scaffold(
+            appBar: AppBar(title: const Text('Deal details')),
+            body: SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          deal.title,
+                          key: const Key('detail-title'),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      _StatusBadge(status: deal.status),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 12),
-                _StatusBadge(status: deal.status),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _Pill(label: deal.category.label),
-                const SizedBox(width: 8),
-                _Pill(
-                  label:
-                      '${deal.quantity} ${deal.quantity == 1 ? 'unit' : 'units'}',
-                ),
-              ],
-            ),
-            if (deal.description != null &&
-                deal.description!.trim().isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                deal.description!.trim(),
-                key: const Key('detail-description'),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  height: 1.5,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _Pill(label: deal.category.label),
+                      const SizedBox(width: 8),
+                      _Pill(
+                        label:
+                            '${deal.quantity} ${deal.quantity == 1 ? 'unit' : 'units'}',
+                      ),
+                    ],
+                  ),
+                  if (deal.description != null &&
+                      deal.description!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      deal.description!.trim(),
+                      key: const Key('detail-description'),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        height: 1.5,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+
+                  // The number that decides whether a student joins.
+                  _CostCard(deal: deal),
+                  const SizedBox(height: 20),
+
+                  _SectionLabel('Slots'),
+                  _SlotsRow(deal: deal),
+                  const SizedBox(height: 24),
+
+                  _SectionLabel('Who is in'),
+                  _Participants(
+                    key: const Key('detail-participants'),
+                    participants: viewModel.participants,
+                  ),
+                  const SizedBox(height: 24),
+
+                  _SectionLabel('Organised by'),
+                  _HostRow(deal: deal),
+                  const SizedBox(height: 24),
+
+                  _SectionLabel('Pickup'),
+                  _DetailRow(
+                    icon: Icons.storefront_outlined,
+                    label: deal.pickupLocation,
+                    keyValue: const Key('detail-pickup-location'),
+                  ),
+                  const SizedBox(height: 8),
+                  _DetailRow(
+                    icon: Icons.event_outlined,
+                    label: deal.deadlineLabel,
+                    keyValue: const Key('detail-deadline'),
+                  ),
+                  const SizedBox(height: 32),
+
+                  if (viewModel.errorMessage != null) ...[
+                    _Banner(
+                      key: const Key('detail-reservation-error'),
+                      message: viewModel.errorMessage!,
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  if (viewModel.isHost)
+                    Container(
+                      key: const Key('detail-host-slot-note'),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: Text(
+                        'You are organising this buy, so one slot is yours. '
+                        'To pull out you would have to cancel the whole deal.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  else
+                    FilledButton(
+                      key: const Key('detail-reserve-button'),
+                      onPressed: viewModel.isUpdating
+                          ? null
+                          : viewModel.holdsSlot
+                          ? (viewModel.canCancel ? viewModel.cancel : null)
+                          : (viewModel.canReserve ? viewModel.reserve : null),
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(52),
+                        backgroundColor: AppTheme.accent,
+                        foregroundColor: Colors.white,
+                        textStyle: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: Text(_actionLabel(viewModel)),
+                    ),
+                ],
               ),
-            ],
-            const SizedBox(height: 24),
-
-            // The number that decides whether a student joins.
-            _CostCard(deal: deal),
-            const SizedBox(height: 20),
-
-            _SectionLabel('Slots'),
-            _SlotsRow(deal: deal),
-            const SizedBox(height: 24),
-
-            _SectionLabel('Organised by'),
-            _HostRow(deal: deal),
-            const SizedBox(height: 24),
-
-            _SectionLabel('Pickup'),
-            _DetailRow(
-              icon: Icons.storefront_outlined,
-              label: deal.pickupLocation,
-              keyValue: const Key('detail-pickup-location'),
             ),
-            const SizedBox(height: 8),
-            _DetailRow(
-              icon: Icons.event_outlined,
-              label: deal.deadlineLabel,
-              keyValue: const Key('detail-deadline'),
-            ),
-            const SizedBox(height: 32),
-
-            FilledButton(
-              key: const Key('detail-reserve-button'),
-              onPressed: isFull ? null : () => _reserve(context),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(52),
-                backgroundColor: AppTheme.accent,
-                foregroundColor: Colors.white,
-                textStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              child: Text(isFull ? 'No slots left' : 'Reserve a slot'),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  void _reserve(BuildContext context) {
-    // Claiming the slot is the Slot Reservation System card. Saying so beats a
-    // button that looks live and silently does nothing.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Reserving a slot is coming soon.')),
-    );
+  String _actionLabel(DealDetailsViewModel viewModel) {
+    if (viewModel.holdsSlot) {
+      return viewModel.deadlinePassed ? 'Slot locked in' : 'Cancel my slot';
+    }
+    if (viewModel.isFull) return 'No slots left';
+    if (viewModel.deadlinePassed) return 'Deadline passed';
+    return 'Reserve a slot';
   }
 }
 
@@ -250,6 +312,61 @@ class _SlotsRow extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _Participants extends StatelessWidget {
+  const _Participants({super.key, required this.participants});
+
+  final List<Reservation> participants;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (participants.isEmpty) {
+      return Text(
+        'Nobody has claimed a share yet.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final participant in participants)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Icon(
+                  participant.isHost
+                      ? Icons.star_outline
+                      : Icons.person_outline,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  participant.displayName,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                if (participant.isHost) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '(organiser)',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -418,6 +535,45 @@ class _StatusBadge extends StatelessWidget {
           fontWeight: FontWeight.w800,
           color: foreground,
         ),
+      ),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  const _Banner({super.key, required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 18,
+            color: theme.colorScheme.onErrorContainer,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onErrorContainer,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

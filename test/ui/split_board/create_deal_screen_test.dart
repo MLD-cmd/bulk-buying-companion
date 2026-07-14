@@ -99,7 +99,8 @@ void main() {
     expect(published.category, DealCategory.pantry);
     expect(published.totalPrice, 750);
     expect(published.totalSlots, 5);
-    expect(published.availableSlots, 5);
+    // The host holds one of the slots they post.
+    expect(published.availableSlots, 4);
     expect(published.status, DealStatus.open);
   });
 

@@ -2,6 +2,50 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/deal.dart';
 
+/// Turns a `deals` (or `deal_feed`) row into a [Deal].
+///
+/// Top-level rather than private to the repository: the reservation RPCs also
+/// return a deals row, and two copies of this mapping would be two things to
+/// keep in step.
+Deal dealFromRow(Map<String, dynamic> row) {
+  final closesAt = row['closes_at'] as String?;
+
+  return Deal(
+    id: row['id'] as String,
+    hubId: row['hub_id'] as String,
+    title: row['title'] as String,
+    description: row['description'] as String?,
+    createdBy: row['created_by'] as String?,
+    // Absent when the row came back from the deals table rather than the
+    // deal_feed view, which is what carries it.
+    hostName: row['host_name'] as String?,
+    category: _dealCategoryFromValue(row['category'] as String),
+    totalPrice: (row['total_price'] as num).toDouble(),
+    quantity: (row['quantity'] as num).toInt(),
+    availableSlots: (row['available_slots'] as num).toInt(),
+    totalSlots: (row['total_slots'] as num).toInt(),
+    pickupLocation: row['pickup_location'] as String,
+    status: _dealStatusFromValue(row['status'] as String),
+    closesAt: closesAt == null ? null : DateTime.parse(closesAt).toLocal(),
+  );
+}
+
+DealCategory _dealCategoryFromValue(String value) {
+  return DealCategory.values.firstWhere(
+    (category) => category.name == value,
+    orElse: () => throw StateError('Unknown deal category "$value".'),
+  );
+}
+
+DealStatus _dealStatusFromValue(String value) {
+  return switch (value) {
+    'open' => DealStatus.open,
+    'filling_fast' => DealStatus.fillingFast,
+    'full' => DealStatus.full,
+    _ => throw StateError('Unknown deal status "$value".'),
+  };
+}
+
 /// Split Board deal-feed contract. Backed by [MockDealRepository] in tests and
 /// [SupabaseDealRepository] in production; the ViewModel never depends on the
 /// concrete implementation.
@@ -120,8 +164,9 @@ class MockDealRepository implements DealRepository {
       category: draft.category,
       totalPrice: draft.totalPrice,
       quantity: draft.quantity,
-      // Nobody has claimed a share of a deal that was just published.
-      availableSlots: draft.totalSlots,
+      // The host is one of the students splitting the buy: "split 5 ways" means
+      // them and four others. Mirrors the deals_set_available_slots trigger.
+      availableSlots: draft.totalSlots - 1,
       totalSlots: draft.totalSlots,
       pickupLocation: draft.pickupLocation.trim(),
       status: DealStatus.open,
@@ -180,7 +225,7 @@ class SupabaseDealRepository implements DealRepository {
   @override
   Future<List<Deal>> getDeals(String hubId) async {
     final rows = await _gateway.getDeals(hubId);
-    return rows.map(_mapDeal).toList();
+    return rows.map(dealFromRow).toList();
   }
 
   @override
@@ -195,12 +240,11 @@ class SupabaseDealRepository implements DealRepository {
         'total_price': draft.totalPrice,
         'quantity': draft.quantity,
         'total_slots': draft.totalSlots,
-        'available_slots': draft.totalSlots,
         'pickup_location': draft.pickupLocation.trim(),
         'status': _statusValue(DealStatus.open),
         'closes_at': draft.closesAt?.toIso8601String(),
       });
-      return _mapDeal(row);
+      return dealFromRow(row);
     } on PostgrestException catch (error) {
       throw DealFailure(_messageFor(error));
     }
@@ -220,45 +264,6 @@ class SupabaseDealRepository implements DealRepository {
       return 'Check the price, quantity and slots, then try again.';
     }
     return 'Could not publish the deal. Please try again.';
-  }
-
-  Deal _mapDeal(Map<String, dynamic> row) {
-    final closesAt = row['closes_at'] as String?;
-
-    return Deal(
-      id: row['id'] as String,
-      hubId: row['hub_id'] as String,
-      title: row['title'] as String,
-      description: row['description'] as String?,
-      createdBy: row['created_by'] as String?,
-      // Absent when the row came back from an insert into deals; the view is
-      // what carries it.
-      hostName: row['host_name'] as String?,
-      category: _mapCategory(row['category'] as String),
-      totalPrice: (row['total_price'] as num).toDouble(),
-      quantity: (row['quantity'] as num).toInt(),
-      availableSlots: (row['available_slots'] as num).toInt(),
-      totalSlots: (row['total_slots'] as num).toInt(),
-      pickupLocation: row['pickup_location'] as String,
-      status: _mapStatus(row['status'] as String),
-      closesAt: closesAt == null ? null : DateTime.parse(closesAt).toLocal(),
-    );
-  }
-
-  DealCategory _mapCategory(String value) {
-    return DealCategory.values.firstWhere(
-      (category) => category.name == value,
-      orElse: () => throw StateError('Unknown deal category "$value".'),
-    );
-  }
-
-  DealStatus _mapStatus(String value) {
-    return switch (value) {
-      'open' => DealStatus.open,
-      'filling_fast' => DealStatus.fillingFast,
-      'full' => DealStatus.full,
-      _ => throw StateError('Unknown deal status "$value".'),
-    };
   }
 
   String _statusValue(DealStatus status) {

@@ -221,6 +221,46 @@ void main() {
       'thirds',
     ]);
   });
+
+  test('replaces a deal when its slot count changes', () async {
+    const rice = Deal(
+      id: 'rice',
+      hubId: 'colon',
+      title: 'Rice Sack',
+      category: DealCategory.grocery,
+      totalPrice: 400,
+      quantity: 1,
+      availableSlots: 4,
+      totalSlots: 5,
+      pickupLocation: 'Campus Gate',
+      status: DealStatus.open,
+    );
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository({
+        'colon': const [rice],
+      }),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+    await pumpEventQueue();
+
+    viewModel.replaceDeal(
+      const Deal(
+        id: 'rice',
+        hubId: 'colon',
+        title: 'Rice Sack',
+        category: DealCategory.grocery,
+        totalPrice: 400,
+        quantity: 1,
+        availableSlots: 3,
+        totalSlots: 5,
+        pickupLocation: 'Campus Gate',
+        status: DealStatus.open,
+      ),
+    );
+
+    expect(viewModel.filteredDeals.single.availableSlots, 3);
+  });
 }
 
 /// Every stub splits 4 ways, so totalPrice / 4 is the per-share price the
