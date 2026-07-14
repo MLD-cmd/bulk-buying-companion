@@ -124,7 +124,7 @@ void main() {
     });
   });
 
-  test('publishes a deal with every slot still open', () async {
+  test('publishes a deal with the host already holding a slot', () async {
     final repository = MockDealRepository();
     final viewModel = CreateDealViewModel(dealRepository: repository);
 
@@ -145,7 +145,9 @@ void main() {
     expect(deal!.title, 'Cooking Oil 5L');
     expect(deal.pickupLocation, 'USJR Main Gate');
     expect(deal.status, DealStatus.open);
-    expect(deal.availableSlots, 5);
+    // "Split 5 ways" means the host and four others -- not five strangers.
+    expect(deal.totalSlots, 5);
+    expect(deal.availableSlots, 4);
     expect(deal.pricePerShare, 150);
     expect(deal.priceLabel, 'P150/share');
     expect(viewModel.errorMessage, isNull);

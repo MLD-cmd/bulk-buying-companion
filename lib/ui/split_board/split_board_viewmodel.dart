@@ -122,6 +122,16 @@ class SplitBoardViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Swaps in a deal whose slot count changed while the student was looking at
+  /// it, so the board does not keep showing the count it was pushed with.
+  void replaceDeal(Deal deal) {
+    final index = _deals.indexWhere((existing) => existing.id == deal.id);
+    if (index == -1) return;
+
+    _deals = [..._deals]..[index] = deal;
+    notifyListeners();
+  }
+
   void clearFilters() {
     if (!hasActiveFilters) {
       return;

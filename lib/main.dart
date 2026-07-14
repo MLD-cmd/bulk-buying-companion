@@ -7,6 +7,7 @@ import 'config/supabase_config.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/deal_repository.dart';
 import 'data/repositories/hub_repository.dart';
+import 'data/repositories/reservation_repository.dart';
 import 'data/repositories/supabase_auth_repository.dart';
 import 'data/services/location_service.dart';
 import 'models/app_user.dart';
@@ -32,11 +33,15 @@ Future<void> main() async {
     // Read lazily: the student is not signed in yet when the app boots.
     currentUserId: () => client.auth.currentUser!.id,
   );
+  final reservationRepository = SupabaseReservationRepository(
+    gateway: PostgrestSupabaseReservationGateway(client),
+  );
   runApp(
     BulkBuyingCompanionApp(
       authRepository: repository,
       hubRepository: hubRepository,
       dealRepository: dealRepository,
+      reservationRepository: reservationRepository,
     ),
   );
 }
@@ -47,12 +52,14 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     this.authRepository,
     this.hubRepository,
     this.dealRepository,
+    this.reservationRepository,
     this.locationService,
   });
 
   final AuthRepository? authRepository;
   final HubRepository? hubRepository;
   final DealRepository? dealRepository;
+  final ReservationRepository? reservationRepository;
   final LocationService? locationService;
 
   @override
@@ -68,6 +75,19 @@ class BulkBuyingCompanionApp extends StatelessWidget {
         ),
         Provider<DealRepository>(
           create: (_) => dealRepository ?? MockDealRepository(),
+        ),
+        Provider<ReservationRepository>(
+          create: (_) {
+            final repository = reservationRepository;
+            // Unlike the other repositories there is no sensible app-wide mock
+            // here: a MockReservationRepository is built around one specific
+            // deal. An app booting without a real one is a wiring bug, not
+            // something to paper over with a fake.
+            if (repository == null) {
+              throw StateError('No ReservationRepository provided.');
+            }
+            return repository;
+          },
         ),
         Provider<LocationService>(
           create: (_) => locationService ?? const GeolocatorLocationService(),

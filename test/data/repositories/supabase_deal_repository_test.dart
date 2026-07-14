@@ -96,9 +96,10 @@ void main() {
     expect(gateway.insertedValues!['created_by'], 'user-1');
     expect(gateway.insertedValues!['category'], 'pantry');
     expect(gateway.insertedValues!['status'], 'open');
-    // A deal nobody has claimed yet has every slot open.
-    expect(gateway.insertedValues!['available_slots'], 5);
-    expect(deal.availableSlots, 5);
+    // available_slots is not sent -- the deals_set_available_slots trigger
+    // owns that column, seating the host in one of the slots.
+    expect(gateway.insertedValues!.containsKey('available_slots'), isFalse);
+    expect(deal.availableSlots, 4);
     expect(deal.status, DealStatus.open);
   });
 
@@ -181,8 +182,14 @@ class _FakeSupabaseDealGateway implements SupabaseDealGateway {
     if (error != null) throw error;
 
     insertedValues = values;
-    // Postgres fills in the id and created_at defaults on the way back.
-    final row = {...values, 'id': 'deal-generated'};
+    // Postgres fills in the id and created_at defaults on the way back, and
+    // the deals_set_available_slots trigger seats the host in one of the
+    // slots -- mirrored here so this fake matches the real database.
+    final row = {
+      ...values,
+      'id': 'deal-generated',
+      'available_slots': (values['total_slots'] as int) - 1,
+    };
     _rows.add(row);
     return row;
   }

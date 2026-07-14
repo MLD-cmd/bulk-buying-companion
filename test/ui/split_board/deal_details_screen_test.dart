@@ -1,11 +1,42 @@
+import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/ui/split_board/deal_details_screen.dart';
+import 'package:bulk_buying_companion/ui/split_board/deal_details_viewmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  Future<void> pumpDetails(WidgetTester tester, Deal deal) {
-    return tester.pumpWidget(MaterialApp(home: DealDetailsScreen(deal: deal)));
+  Future<void> pumpDetails(
+    WidgetTester tester,
+    Deal deal, {
+    String currentUserId = 'visitor',
+  }) async {
+    // Tall enough that the whole scrollable body — including the reserve
+    // button below the new participants list — renders onstage, so plain
+    // `find.text` / `find.byKey` see it without a manual scroll.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider(
+          create: (_) => DealDetailsViewModel(
+            deal: deal,
+            currentUserId: currentUserId,
+            reservationRepository: MockReservationRepository(
+              deal: deal,
+              currentUserId: currentUserId,
+            ),
+          ),
+          child: const DealDetailsScreen(),
+        ),
+      ),
+    );
+    // Lets the ViewModel's initial participants load resolve before assertions.
+    await tester.pump();
   }
 
   testWidgets('shows the product, host, cost, slots and pickup details', (
@@ -71,18 +102,6 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
-  testWidgets('reserving is not wired up yet and says so', (tester) async {
-    await pumpDetails(tester, _deal);
-
-    final button = find.byKey(const Key('detail-reserve-button'));
-    await tester.ensureVisible(button);
-    await tester.pumpAndSettle();
-    await tester.tap(button);
-    await tester.pump();
-
-    expect(find.text('Reserving a slot is coming soon.'), findsOneWidget);
-  });
-
   testWidgets('states the surplus when the split is uneven', (tester) async {
     await pumpDetails(tester, _uneven);
 
@@ -95,6 +114,37 @@ void main() {
 
     expect(find.text('P180'), findsOneWidget);
     expect(find.byKey(const Key('detail-split-surplus')), findsNothing);
+  });
+
+  testWidgets('a student can take a slot', (tester) async {
+    await pumpDetails(tester, _reservableDeal, currentUserId: 'user-2');
+
+    expect(find.text('Reserve a slot'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('detail-reserve-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cancel my slot'), findsOneWidget);
+  });
+
+  testWidgets('the host is shown holding a slot they cannot give up', (
+    tester,
+  ) async {
+    await pumpDetails(tester, _reservableDeal, currentUserId: 'user-1');
+
+    expect(find.byKey(const Key('detail-host-slot-note')), findsOneWidget);
+    expect(find.text('Cancel my slot'), findsNothing);
+  });
+
+  testWidgets('lists who is in the buy', (tester) async {
+    await pumpDetails(tester, _reservableDeal, currentUserId: 'user-2');
+
+    final participants = find.byKey(const Key('detail-participants'));
+    expect(participants, findsOneWidget);
+    expect(
+      find.descendant(of: participants, matching: find.text('Marco Villanueva')),
+      findsOneWidget,
+    );
   });
 }
 
@@ -169,4 +219,21 @@ const _full = Deal(
   totalSlots: 3,
   pickupLocation: 'Barangay Hall Lobby',
   status: DealStatus.full,
+);
+
+/// Used by the reservation tests: needs a real [createdBy] so the host rules
+/// (already holds a slot, cannot cancel) actually engage.
+const _reservableDeal = Deal(
+  id: 'colon-rice-reservable',
+  hubId: 'colon',
+  title: '25kg Rice Sack',
+  createdBy: 'user-1',
+  hostName: 'Marco Villanueva',
+  category: DealCategory.grocery,
+  totalPrice: 900,
+  quantity: 1,
+  availableSlots: 3,
+  totalSlots: 5,
+  pickupLocation: 'USJR Main Gate',
+  status: DealStatus.open,
 );

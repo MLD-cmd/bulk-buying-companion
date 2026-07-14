@@ -1,4 +1,6 @@
+import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
+import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/ui/split_board/split_board_screen.dart';
 import 'package:bulk_buying_companion/ui/split_board/split_board_viewmodel.dart';
@@ -44,9 +46,19 @@ void main() {
       hubName: 'Colon Street Hub',
     );
 
+    // DealDetailsScreen.route() reads these to build its ViewModel.
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: viewModel,
+      MultiProvider(
+        providers: [
+          Provider<ReservationRepository>(
+            create: (_) => MockReservationRepository(
+              deal: const _StubDeal(id: 'rice', title: 'Rice Sack'),
+              currentUserId: 'visitor',
+            ),
+          ),
+          Provider<AuthRepository>(create: (_) => MockAuthRepository()),
+          ChangeNotifierProvider.value(value: viewModel),
+        ],
         child: const MaterialApp(home: SplitBoardScreen(hubId: 'colon')),
       ),
     );
@@ -57,7 +69,12 @@ void main() {
     expect(find.text('Deal details'), findsOneWidget);
     expect(find.byKey(const Key('detail-cost-per-slot')), findsOneWidget);
     expect(find.byKey(const Key('detail-host-name')), findsOneWidget);
-    expect(find.byKey(const Key('detail-reserve-button')), findsOneWidget);
+    // Below the fold once the participants section was added; existence is
+    // all this test cares about, so skip the onstage-only filter.
+    expect(
+      find.byKey(const Key('detail-reserve-button'), skipOffstage: false),
+      findsOneWidget,
+    );
   });
 }
 

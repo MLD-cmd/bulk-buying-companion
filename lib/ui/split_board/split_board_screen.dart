@@ -114,8 +114,12 @@ class _DealList extends StatelessWidget {
           for (final deal in deals) ...[
             InkWell(
               key: Key('deal-card-${deal.id}'),
-              onTap: () =>
-                  Navigator.of(context).push(DealDetailsScreen.route(deal)),
+              onTap: () async {
+                final updated = await Navigator.of(
+                  context,
+                ).push(DealDetailsScreen.route(deal));
+                if (updated != null) viewModel.replaceDeal(updated);
+              },
               borderRadius: BorderRadius.circular(8),
               child: DealCard(deal: deal),
             ),
