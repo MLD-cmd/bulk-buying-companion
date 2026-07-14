@@ -133,10 +133,13 @@ class Deal {
   /// The host's own slot is marked paid the moment the deal exists — they
   /// cannot pay themselves — so it is not money they are holding for anyone.
   ///
-  /// Floored rather than clamped: this runs inside build, and a Deal is built
-  /// from whatever the database row happens to hold. [CostSplit.clamped] is
-  /// here for the same reason — bad data must not throw and take the feed down.
-  int get studentsWhoPaid => math.max(0, paidCount - 1);
+  /// Bounded on both sides rather than trusted: this feeds the peso figure in
+  /// the cancel dialog, and a Deal is built straight from a database row.
+  /// [CostSplit.clamped] is here for the same reason.
+  int get studentsWhoPaid {
+    final students = math.max(0, participantCount - 1);
+    return math.min(math.max(0, paidCount - 1), students);
+  }
 
   /// What the host would have to hand back if they cancelled now.
   double get amountHeld => studentsWhoPaid * pricePerShare;

@@ -527,9 +527,13 @@ class _StatusBadge extends StatelessWidget {
               const Color(0xFFDCEFE3),
               const Color(0xFF173E28),
             ),
-            DealStatus.full => (
-              const Color(0xFFFDECC8),
-              const Color(0xFF6B4A00),
+            // Red, not the amber above: a full deal is one you cannot join, and
+            // it sits a tap away from the filling-fast card that brought you
+            // here. Cancelled shares the red, but the labels differ and the
+            // board hides cancelled deals by default, so the two never meet.
+            DealStatus.full || DealStatus.cancelled => (
+              const Color(0xFFF3D6D6),
+              const Color(0xFF6B1D1D),
             ),
             // The two states where the deal is waiting on the host.
             DealStatus.readyToPurchase || DealStatus.readyForPickup => (
@@ -539,10 +543,6 @@ class _StatusBadge extends StatelessWidget {
             DealStatus.completed => (
               const Color(0xFFE6E6E1),
               const Color(0xFF3D3D38),
-            ),
-            DealStatus.cancelled => (
-              const Color(0xFFF3D6D6),
-              const Color(0xFF6B1D1D),
             ),
           };
 

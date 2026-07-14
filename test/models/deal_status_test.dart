@@ -131,6 +131,15 @@ void main() {
       expect(fourWay.isFillingFast, isTrue);
     });
 
+    // The smallest deal there is. The trigger seats the host on creation, so a
+    // 2-way split is down to its last slot from birth -- and that is honest:
+    // one student joining fills it.
+    test('the smallest deal is filling fast from birth', () {
+      final d = deal(totalSlots: 2, availableSlots: 1, paidCount: 1);
+      expect(d.isFillingFast, isTrue);
+      expect(d.statusLabel, 'Filling fast');
+    });
+
     test('a full deal is never filling fast', () {
       final d = deal(totalSlots: 8, availableSlots: 0);
       expect(d.isFillingFast, isFalse);
@@ -154,12 +163,24 @@ void main() {
       expect(d.amountHeld, 0);
     });
 
-    // A Deal is built from whatever the database row holds, and this getter
-    // runs inside build. It must floor, not go negative or throw.
     test('nobody paid at all is not a negative number of students', () {
       final d = deal(totalSlots: 4, availableSlots: 4);
       expect(d.studentsWhoPaid, 0);
       expect(d.amountHeld, 0);
+    });
+
+    // A Deal is built from whatever the row holds, and this getter runs inside
+    // build. Bad data must not throw and take the feed down with it, and must
+    // not put a garbage peso figure in front of a host either.
+    test('a malformed row cannot throw or invent money', () {
+      final negative = deal(totalSlots: -1, availableSlots: 0, paidCount: 0);
+      expect(negative.studentsWhoPaid, 0);
+      expect(negative.amountHeld, 0);
+
+      // More payments than there are people to make them.
+      final overpaid = deal(totalSlots: 4, availableSlots: 0, paidCount: 99);
+      expect(overpaid.studentsWhoPaid, 3);
+      expect(overpaid.amountHeld, 300);
     });
 
     test('money held is the students who paid, at the per-share price', () {

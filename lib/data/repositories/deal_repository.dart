@@ -76,11 +76,16 @@ class DealFailure implements Exception {
 /// In-memory stand-in. Deals are stubbed per hub so the Split Board renders
 /// with placeholder cards in tests.
 class MockDealRepository implements DealRepository {
+  /// Between them the seeds walk the lifecycle — Open, Filling fast, Full,
+  /// Ready to purchase — so the statuses are visible when the app runs on mock
+  /// data. Every one of them has a host, and a host's slot is paid from the
+  /// moment the deal exists, so no seed can have participants and nobody paid.
   MockDealRepository()
     : _dealsByHub = {
         'colon': [
           Deal(
             id: 'colon-rice',
+            createdBy: 'marco',
             hostName: 'Marco Villanueva',
             hubId: 'colon',
             title: '25kg Rice Sack — Split 5 ways',
@@ -91,10 +96,13 @@ class MockDealRepository implements DealRepository {
             availableSlots: 3,
             totalSlots: 5,
             pickupLocation: 'USJR Main Gate',
+            paidCount: 1,
             closesAt: DateTime(2026, 7, 16),
           ),
+          // Down to its last slot.
           Deal(
             id: 'colon-water',
+            createdBy: 'bea',
             hostName: 'Bea Alonzo',
             hubId: 'colon',
             title: 'Bottled Water Case (24pk)',
@@ -105,10 +113,12 @@ class MockDealRepository implements DealRepository {
             availableSlots: 1,
             totalSlots: 4,
             pickupLocation: 'Colon Street Hub',
+            paidCount: 2,
             closesAt: DateTime(2026, 7, 14),
           ),
           Deal(
             id: 'colon-detergent',
+            createdBy: 'rey',
             hostName: 'Rey Mercado',
             hubId: 'colon',
             title: 'Laundry Detergent 6L',
@@ -127,6 +137,7 @@ class MockDealRepository implements DealRepository {
         'magallanes': [
           Deal(
             id: 'magallanes-eggs',
+            createdBy: 'trina',
             hostName: 'Trina Lopez',
             hubId: 'magallanes',
             title: 'Egg Tray (30s) — Split 3 ways',
@@ -137,10 +148,14 @@ class MockDealRepository implements DealRepository {
             availableSlots: 1,
             totalSlots: 3,
             pickupLocation: 'Magallanes Residence Gate',
+            paidCount: 1,
             closesAt: DateTime(2026, 7, 15),
           ),
+          // Full and everyone has paid, so it is waiting on Karl to go and buy
+          // the coffee.
           Deal(
             id: 'magallanes-coffee',
+            createdBy: 'karl',
             hostName: 'Karl Diaz',
             hubId: 'magallanes',
             title: '3-in-1 Coffee Bulk Pack',
@@ -148,9 +163,10 @@ class MockDealRepository implements DealRepository {
             amount: 60,
             unit: DealUnit.sachets,
             category: DealCategory.pantry,
-            availableSlots: 4,
+            availableSlots: 0,
             totalSlots: 6,
             pickupLocation: 'Tower A Lobby',
+            paidCount: 6,
             closesAt: DateTime(2026, 7, 19),
           ),
         ],

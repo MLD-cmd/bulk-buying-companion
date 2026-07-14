@@ -111,7 +111,7 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = _statusColors(theme, deal);
+    final colors = _statusColors(theme);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -129,7 +129,7 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 
-  _BadgeColors _statusColors(ThemeData theme, Deal deal) {
+  _BadgeColors _statusColors(ThemeData theme) {
     if (deal.isFillingFast) {
       return _BadgeColors(
         background: theme.colorScheme.tertiaryContainer,

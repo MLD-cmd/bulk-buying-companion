@@ -477,9 +477,12 @@ and cover six statuses with the screen's hand-picked palette:
               const Color(0xFFDCEFE3),
               const Color(0xFF173E28),
             ),
+            // Full keeps its original red: "you cannot join this". Giving it
+            // the Filling-fast amber would make the two indistinguishable, and
+            // they are adjacent states on the same board.
             DealStatus.full => (
-              const Color(0xFFFDECC8),
-              const Color(0xFF6B4A00),
+              const Color(0xFFF3D6D6),
+              const Color(0xFF6B1D1D),
             ),
             DealStatus.readyToPurchase => (
               const Color(0xFFDDE7F7),
