@@ -258,7 +258,10 @@ class SupabaseDealRepository implements DealRepository {
         'pickup_location': draft.pickupLocation.trim(),
         'closes_at': draft.closesAt?.toIso8601String(),
       });
-      return dealFromRow(row);
+      // The insert returns the raw deals row, which carries no counts. The
+      // trigger has just given the host their slot, and a host's slot is paid
+      // from the moment it exists -- they cannot pay themselves.
+      return dealFromRow(row).copyWith(paidCount: 1);
     } on PostgrestException catch (error) {
       throw DealFailure(_messageFor(error));
     }

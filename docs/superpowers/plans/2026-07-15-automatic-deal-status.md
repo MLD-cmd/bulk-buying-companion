@@ -317,8 +317,12 @@ Add the fields and the derivation, next to `costSplit` and `physicalShare`:
   }
 
   /// A label on an open deal that is nearly full, not a state of its own.
+  ///
+  /// The last slot always counts: on a 3-way split, one seat left is as urgent
+  /// as a deal gets, and a flat quarter rule would stay silent through it.
   bool get isFillingFast =>
-      status == DealStatus.open && availableSlots * 4 <= totalSlots;
+      status == DealStatus.open &&
+      (availableSlots == 1 || availableSlots * 4 <= totalSlots);
 
   /// What the badge reads.
   String get statusLabel => isFillingFast ? 'Filling fast' : status.label;

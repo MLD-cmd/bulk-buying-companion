@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'cost_split.dart';
 import 'deal_unit.dart';
 import 'physical_share.dart';
@@ -118,19 +120,33 @@ class Deal {
   }
 
   /// A label on an open deal that is nearly full, not a state of its own.
+  ///
+  /// The last slot always counts: on a 3-way split, one seat left is as urgent
+  /// as a deal gets, and a flat quarter rule would stay silent through it.
   bool get isFillingFast =>
-      status == DealStatus.open && availableSlots * 4 <= totalSlots;
+      status == DealStatus.open &&
+      (availableSlots == 1 || availableSlots * 4 <= totalSlots);
 
   /// What the badge reads.
   String get statusLabel => isFillingFast ? 'Filling fast' : status.label;
 
   /// The host's own slot is marked paid the moment the deal exists — they
   /// cannot pay themselves — so it is not money they are holding for anyone.
-  int get studentsWhoPaid => (paidCount - 1).clamp(0, totalSlots);
+  ///
+  /// Floored rather than clamped: this runs inside build, and a Deal is built
+  /// from whatever the database row happens to hold. [CostSplit.clamped] is
+  /// here for the same reason — bad data must not throw and take the feed down.
+  int get studentsWhoPaid => math.max(0, paidCount - 1);
 
   /// What the host would have to hand back if they cancelled now.
   double get amountHeld => studentsWhoPaid * pricePerShare;
 
+  /// Copies only the facts the lifecycle moves; everything else a deal is
+  /// published with stays put.
+  ///
+  /// [purchasedAt] and [cancelledAt] are set once and cannot be cleared through
+  /// here — passing null leaves them as they were, rather than un-buying or
+  /// un-cancelling the deal, because nothing in the app ever does either.
   Deal copyWith({
     int? availableSlots,
     DateTime? purchasedAt,

@@ -104,9 +104,15 @@ host *it is now safe to spend*, not a gate they must pass through.
 ### "Filling fast" stops being a status
 
 It becomes what it always really was: a label on an Open deal that is nearly
-full. **An Open deal is filling fast when a quarter or less of its slots
-remain** (`availableSlots * 4 <= totalSlots`). For a 7-slot deal that is the last
-slot; for a 20-slot deal, the last five.
+full. **An Open deal is filling fast when it is down to its last slot, or a
+quarter or less of its slots remain**
+(`availableSlots == 1 || availableSlots * 4 <= totalSlots`). For a 20-slot deal
+that is the last five.
+
+The last slot is called out separately because a bare quarter rule goes silent
+exactly where urgency is highest: slots start at 2, and on a 2- or 3-way split one
+seat left is never a quarter, so a flat rule would badge the most urgent deals on
+the board as merely "Open".
 
 Not stored, not in the enum, nothing to keep in sync. It disappears from
 `DealStatus` and from the database constraint.

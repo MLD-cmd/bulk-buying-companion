@@ -531,11 +531,8 @@ class _StatusBadge extends StatelessWidget {
               const Color(0xFFFDECC8),
               const Color(0xFF6B4A00),
             ),
-            DealStatus.readyToPurchase => (
-              const Color(0xFFDDE7F7),
-              const Color(0xFF1B3A66),
-            ),
-            DealStatus.readyForPickup => (
+            // The two states where the deal is waiting on the host.
+            DealStatus.readyToPurchase || DealStatus.readyForPickup => (
               const Color(0xFFDDE7F7),
               const Color(0xFF1B3A66),
             ),

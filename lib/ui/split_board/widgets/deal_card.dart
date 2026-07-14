@@ -141,11 +141,14 @@ class _StatusBadge extends StatelessWidget {
         background: theme.colorScheme.primaryContainer,
         foreground: theme.colorScheme.onPrimaryContainer,
       ),
-      DealStatus.full ||
-      DealStatus.readyToPurchase => _BadgeColors(
-        background: theme.colorScheme.tertiaryContainer,
-        foreground: theme.colorScheme.onTertiaryContainer,
+      // Full and Filling fast sit next to each other on the same board, so they
+      // cannot share a tone: this one means "you cannot join this".
+      DealStatus.full => _BadgeColors(
+        background: theme.colorScheme.errorContainer,
+        foreground: theme.colorScheme.onErrorContainer,
       ),
+      // The two states where the deal is waiting on the host, not the student.
+      DealStatus.readyToPurchase ||
       DealStatus.readyForPickup => _BadgeColors(
         background: theme.colorScheme.secondaryContainer,
         foreground: theme.colorScheme.onSecondaryContainer,
@@ -154,6 +157,8 @@ class _StatusBadge extends StatelessWidget {
         background: theme.colorScheme.surfaceContainerHighest,
         foreground: theme.colorScheme.onSurfaceVariant,
       ),
+      // Shares Full's tone, but the labels differ and the board hides cancelled
+      // deals by default, so the two never sit side by side.
       DealStatus.cancelled => _BadgeColors(
         background: theme.colorScheme.errorContainer,
         foreground: theme.colorScheme.onErrorContainer,

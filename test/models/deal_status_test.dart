@@ -120,10 +120,28 @@ void main() {
       expect(d.statusLabel, 'Open');
     });
 
+    // A quarter of 3 is less than one slot, so a bare quarter rule could never
+    // fire on the smallest deals -- and one seat left is as urgent as it gets.
+    test('the last slot is filling fast however small the deal', () {
+      final threeWay = deal(totalSlots: 3, availableSlots: 1);
+      expect(threeWay.isFillingFast, isTrue);
+      expect(threeWay.statusLabel, 'Filling fast');
+
+      final fourWay = deal(totalSlots: 4, availableSlots: 1);
+      expect(fourWay.isFillingFast, isTrue);
+    });
+
     test('a full deal is never filling fast', () {
       final d = deal(totalSlots: 8, availableSlots: 0);
       expect(d.isFillingFast, isFalse);
       expect(d.statusLabel, 'Full');
+    });
+
+    // Nobody can join a bought deal, so its empty seats are not urgent.
+    test('a deal that has been bought is never filling fast', () {
+      final d = deal(totalSlots: 4, availableSlots: 1, purchasedAt: now);
+      expect(d.isFillingFast, isFalse);
+      expect(d.statusLabel, 'Ready for pickup');
     });
   });
 
@@ -132,6 +150,14 @@ void main() {
     // themselves -- so it is not money they owe back.
     test('the host is not counted as a student who paid', () {
       final d = deal(totalSlots: 4, availableSlots: 0, paidCount: 1);
+      expect(d.studentsWhoPaid, 0);
+      expect(d.amountHeld, 0);
+    });
+
+    // A Deal is built from whatever the database row holds, and this getter
+    // runs inside build. It must floor, not go negative or throw.
+    test('nobody paid at all is not a negative number of students', () {
+      final d = deal(totalSlots: 4, availableSlots: 4);
       expect(d.studentsWhoPaid, 0);
       expect(d.amountHeld, 0);
     });
