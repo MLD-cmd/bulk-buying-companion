@@ -78,17 +78,49 @@ void main() {
 
     test('previews the per-share price only once the inputs are usable', () {
       expect(
-        viewModel.previewPricePerShare(totalPrice: '900', totalSlots: '5'),
+        viewModel.previewSplit(totalPrice: '900', totalSlots: '5')?.pricePerShare,
         180,
       );
       expect(
-        viewModel.previewPricePerShare(totalPrice: '900', totalSlots: ''),
+        viewModel.previewSplit(totalPrice: '900', totalSlots: ''),
         isNull,
       );
       expect(
-        viewModel.previewPricePerShare(totalPrice: '900', totalSlots: '0'),
+        viewModel.previewSplit(totalPrice: '900', totalSlots: '0'),
         isNull,
       );
+    });
+
+    test('previews nothing rather than throwing on junk the field allows', () {
+      // double.tryParse takes all three of these happily, and the centavo
+      // arithmetic throws on them. previewSplit runs inside build on every
+      // keystroke, so it has to hand back null instead of taking down the form.
+      for (final price in ['1e400', 'Infinity', 'NaN']) {
+        expect(
+          viewModel.previewSplit(totalPrice: price, totalSlots: '5'),
+          isNull,
+          reason: '$price must not reach the split arithmetic',
+        );
+        expect(
+          viewModel.validateTotalPrice(price),
+          'Total price must be a number.',
+        );
+      }
+    });
+
+    test('a one-way split is not previewed, since submit would reject it', () {
+      expect(viewModel.previewSplit(totalPrice: '900', totalSlots: '1'), isNull);
+      expect(viewModel.validateTotalSlots('1'), isNotNull);
+    });
+
+    test('a price under a centavo is rejected, not rounded up into one', () {
+      // (0.005 * 100).round() is 1, so a centavo-based check would let this
+      // through and store a total the split does not agree with.
+      expect(
+        viewModel.validateTotalPrice('0.005'),
+        'Total price must be at least P0.01.',
+      );
+      expect(viewModel.validateTotalPrice('0.01'), isNull);
     });
   });
 
@@ -150,6 +182,52 @@ void main() {
       viewModel.errorMessage,
       'Could not publish the deal. Please try again.',
     );
+  });
+
+  test('rejects a price that rounds away to nothing', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(
+      viewModel.validateTotalPrice('0.001'),
+      'Total price must be at least P0.01.',
+    );
+    expect(viewModel.validateTotalPrice('0.01'), isNull);
+  });
+
+  test('previews an uneven split with its surplus', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    final split = viewModel.previewSplit(totalPrice: '900', totalSlots: '7');
+
+    expect(split, isNotNull);
+    expect(split!.pricePerShare, 128.58);
+    expect(split.surplusCentavos, 6);
+    expect(split.isEven, isFalse);
+
+    // The poster's preview and the published deal must agree.
+    const published = Deal(
+      id: 'published',
+      hubId: 'colon',
+      title: '25kg Rice Sack',
+      category: DealCategory.grocery,
+      totalPrice: 900,
+      quantity: 1,
+      availableSlots: 7,
+      totalSlots: 7,
+      pickupLocation: 'USJR Main Gate',
+      status: DealStatus.open,
+    );
+    expect(published.pricePerShare, split.pricePerShare);
+  });
+
+  test('previews nothing when the price is unusable', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(
+      viewModel.previewSplit(totalPrice: '0.001', totalSlots: '7'),
+      isNull,
+    );
+    expect(viewModel.previewSplit(totalPrice: '900', totalSlots: '0'), isNull);
   });
 }
 

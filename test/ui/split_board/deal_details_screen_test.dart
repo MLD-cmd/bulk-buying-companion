@@ -82,6 +82,20 @@ void main() {
 
     expect(find.text('Reserving a slot is coming soon.'), findsOneWidget);
   });
+
+  testWidgets('states the surplus when the split is uneven', (tester) async {
+    await pumpDetails(tester, _uneven);
+
+    expect(find.text('P128.58'), findsOneWidget);
+    expect(find.byKey(const Key('detail-split-surplus')), findsOneWidget);
+  });
+
+  testWidgets('says nothing about surplus on an even split', (tester) async {
+    await pumpDetails(tester, _deal);
+
+    expect(find.text('P180'), findsOneWidget);
+    expect(find.byKey(const Key('detail-split-surplus')), findsNothing);
+  });
 }
 
 final _deal = Deal(
@@ -125,6 +139,20 @@ const _hostless = Deal(
   quantity: 1,
   availableSlots: 5,
   totalSlots: 5,
+  pickupLocation: 'USJR Main Gate',
+  status: DealStatus.open,
+);
+
+const _uneven = Deal(
+  id: 'colon-rice-7',
+  hubId: 'colon',
+  title: '25kg Rice Sack',
+  hostName: 'Marco Villanueva',
+  category: DealCategory.grocery,
+  totalPrice: 900,
+  quantity: 1,
+  availableSlots: 3,
+  totalSlots: 7,
   pickupLocation: 'USJR Main Gate',
   status: DealStatus.open,
 );

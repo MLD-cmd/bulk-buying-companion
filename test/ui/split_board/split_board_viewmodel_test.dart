@@ -175,6 +175,52 @@ void main() {
       'Rice Sack',
     ]);
   });
+
+  test('sorts by price on the real per-share number, not a formatted string', () async {
+    // 100 / 3 rounds up to P33.34/share; 100 / 4 is an exact P25.00/share.
+    // A regex over the formatted label would still parse both correctly, so
+    // this is a regression guard for the refactor away from that regex.
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository({
+        'colon': [
+          const Deal(
+            id: 'thirds',
+            hubId: 'colon',
+            title: 'Thirds Deal',
+            category: DealCategory.grocery,
+            totalPrice: 100,
+            quantity: 1,
+            availableSlots: 1,
+            totalSlots: 3,
+            pickupLocation: 'Campus Gate',
+            status: DealStatus.open,
+          ),
+          const Deal(
+            id: 'quarters',
+            hubId: 'colon',
+            title: 'Quarters Deal',
+            category: DealCategory.grocery,
+            totalPrice: 100,
+            quantity: 1,
+            availableSlots: 1,
+            totalSlots: 4,
+            pickupLocation: 'Campus Gate',
+            status: DealStatus.open,
+          ),
+        ],
+      }),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+    await Future<void>.value();
+
+    viewModel.updateSortOption(DealSortOption.price);
+
+    expect(viewModel.filteredDeals.map((deal) => deal.id), [
+      'quarters',
+      'thirds',
+    ]);
+  });
 }
 
 /// Every stub splits 4 ways, so totalPrice / 4 is the per-share price the
