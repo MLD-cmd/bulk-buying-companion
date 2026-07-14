@@ -151,6 +151,43 @@ void main() {
       'Could not publish the deal. Please try again.',
     );
   });
+
+  test('rejects a price that rounds away to nothing', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(
+      viewModel.validateTotalPrice('0.001'),
+      'Total price must be at least P0.01.',
+    );
+    expect(viewModel.validateTotalPrice('0.01'), isNull);
+  });
+
+  test('previews an uneven split with its surplus', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    final split = viewModel.previewSplit(totalPrice: '900', totalSlots: '7');
+
+    expect(split, isNotNull);
+    expect(split!.pricePerShare, 128.58);
+    expect(split.surplusCentavos, 6);
+    expect(split.isEven, isFalse);
+
+    // The poster's preview and the published deal must agree.
+    expect(
+      viewModel.previewPricePerShare(totalPrice: '900', totalSlots: '7'),
+      128.58,
+    );
+  });
+
+  test('previews nothing when the price is unusable', () {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+
+    expect(
+      viewModel.previewSplit(totalPrice: '0.001', totalSlots: '7'),
+      isNull,
+    );
+    expect(viewModel.previewSplit(totalPrice: '900', totalSlots: '0'), isNull);
+  });
 }
 
 const _draft = DealDraft(

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/deal_repository.dart';
+import '../../models/cost_split.dart';
 import '../../models/deal.dart';
 
 /// A split with one share is not a split, and past a certain point the shares
@@ -42,6 +43,9 @@ class CreateDealViewModel extends ChangeNotifier {
     final parsed = double.tryParse(text);
     if (parsed == null) return 'Total price must be a number.';
     if (parsed <= 0) return 'Total price must be more than 0.';
+    // Below a centavo the split rounds away to zero and every student pays
+    // nothing, which is not a deal.
+    if ((parsed * 100).round() < 1) return 'Total price must be at least P0.01.';
     return null;
   }
 
@@ -93,16 +97,28 @@ class CreateDealViewModel extends ChangeNotifier {
     return null;
   }
 
-  /// What each student pays, shown live under the price field so the poster
-  /// sees the split before publishing. Null while the inputs are unusable.
-  double? previewPricePerShare({
+  /// The split shown live under the price field, so the poster sees exactly
+  /// what students will be asked to pay before publishing. Null while the
+  /// inputs are unusable.
+  CostSplit? previewSplit({
     required String? totalPrice,
     required String? totalSlots,
   }) {
     final price = double.tryParse((totalPrice ?? '').trim());
     final slots = int.tryParse((totalSlots ?? '').trim());
-    if (price == null || slots == null || price <= 0 || slots <= 0) return null;
-    return price / slots;
+    if (price == null || slots == null) return null;
+    if (slots < 1 || (price * 100).round() < 1) return null;
+    return CostSplit.from(totalPrice: price, slots: slots);
+  }
+
+  double? previewPricePerShare({
+    required String? totalPrice,
+    required String? totalSlots,
+  }) {
+    return previewSplit(
+      totalPrice: totalPrice,
+      totalSlots: totalSlots,
+    )?.pricePerShare;
   }
 
   /// Returns the published deal, or null when it was rejected. The reason is
