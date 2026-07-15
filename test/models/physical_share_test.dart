@@ -124,7 +124,6 @@ void main() {
       availableSlots: 6,
       totalSlots: 7,
       pickupLocation: 'USJR Main Gate',
-      status: DealStatus.open,
     );
 
     expect(deal.physicalShare.shareLabel, '3.57 kg');

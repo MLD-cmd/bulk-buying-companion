@@ -74,7 +74,7 @@ class DealCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              _StatusBadge(status: deal.status),
+              _StatusBadge(deal: deal),
             ],
           ),
           const SizedBox(height: 12),
@@ -104,14 +104,14 @@ class DealCard extends StatelessWidget {
 }
 
 class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
+  const _StatusBadge({required this.deal});
 
-  final DealStatus status;
+  final Deal deal;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = _statusColors(theme, status);
+    final colors = _statusColors(theme);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -120,7 +120,7 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        status.label,
+        deal.statusLabel,
         style: theme.textTheme.labelSmall?.copyWith(
           color: colors.foreground,
           fontWeight: FontWeight.w700,
@@ -129,17 +129,37 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 
-  _BadgeColors _statusColors(ThemeData theme, DealStatus status) {
-    return switch (status) {
+  _BadgeColors _statusColors(ThemeData theme) {
+    if (deal.isFillingFast) {
+      return _BadgeColors(
+        background: theme.colorScheme.tertiaryContainer,
+        foreground: theme.colorScheme.onTertiaryContainer,
+      );
+    }
+    return switch (deal.status) {
       DealStatus.open => _BadgeColors(
         background: theme.colorScheme.primaryContainer,
         foreground: theme.colorScheme.onPrimaryContainer,
       ),
-      DealStatus.fillingFast => _BadgeColors(
-        background: theme.colorScheme.tertiaryContainer,
-        foreground: theme.colorScheme.onTertiaryContainer,
-      ),
+      // Full and Filling fast sit next to each other on the same board, so they
+      // cannot share a tone: this one means "you cannot join this".
       DealStatus.full => _BadgeColors(
+        background: theme.colorScheme.errorContainer,
+        foreground: theme.colorScheme.onErrorContainer,
+      ),
+      // The two states where the deal is waiting on the host, not the student.
+      DealStatus.readyToPurchase ||
+      DealStatus.readyForPickup => _BadgeColors(
+        background: theme.colorScheme.secondaryContainer,
+        foreground: theme.colorScheme.onSecondaryContainer,
+      ),
+      DealStatus.completed => _BadgeColors(
+        background: theme.colorScheme.surfaceContainerHighest,
+        foreground: theme.colorScheme.onSurfaceVariant,
+      ),
+      // Shares Full's tone, but the labels differ and the board hides cancelled
+      // deals by default, so the two never sit side by side.
+      DealStatus.cancelled => _BadgeColors(
         background: theme.colorScheme.errorContainer,
         foreground: theme.colorScheme.onErrorContainer,
       ),

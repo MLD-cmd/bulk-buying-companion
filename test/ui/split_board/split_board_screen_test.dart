@@ -77,6 +77,71 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('the board updates when details returns a new lifecycle state', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const deal = Deal(
+      id: 'rice',
+      hubId: 'colon',
+      title: 'Rice Sack',
+      createdBy: 'demo-student',
+      category: DealCategory.grocery,
+      totalPrice: 400,
+      amount: 1,
+      unit: DealUnit.kg,
+      availableSlots: 0,
+      totalSlots: 2,
+      pickupLocation: 'Campus Gate',
+      paidCount: 2,
+    );
+    final authRepository = MockAuthRepository();
+    await authRepository.signIn(
+      email: 'student@usjr.edu.ph',
+      password: 'Student123',
+    );
+    final reservationRepository = MockReservationRepository(
+      deal: deal,
+      currentUserId: 'demo-student',
+    );
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository(const [deal]),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ReservationRepository>.value(value: reservationRepository),
+          Provider<AuthRepository>.value(value: authRepository),
+          ChangeNotifierProvider.value(value: viewModel),
+        ],
+        child: const MaterialApp(home: SplitBoardScreen(hubId: 'colon')),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Ready to purchase'), findsOneWidget);
+
+    await _openDetails(tester, 'rice');
+    final purchasedButton = find.byKey(
+      const Key('detail-mark-purchased-button'),
+    );
+    await tester.ensureVisible(purchasedButton);
+    await tester.tap(purchasedButton);
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ready for pickup'), findsOneWidget);
+    expect(find.text('Ready to purchase'), findsNothing);
+  });
 }
 
 /// The board is the only way into the details screen, so the tap has to work.
@@ -97,7 +162,6 @@ class _StubDeal extends Deal {
         availableSlots: 1,
         totalSlots: 4,
         pickupLocation: 'Campus Gate',
-        status: DealStatus.open,
       );
 }
 

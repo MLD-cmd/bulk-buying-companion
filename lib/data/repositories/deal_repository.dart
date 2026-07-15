@@ -10,6 +10,8 @@ import '../../models/deal_unit.dart';
 /// keep in step.
 Deal dealFromRow(Map<String, dynamic> row) {
   final closesAt = row['closes_at'] as String?;
+  final purchasedAt = row['purchased_at'] as String?;
+  final cancelledAt = row['cancelled_at'] as String?;
 
   return Deal(
     id: row['id'] as String,
@@ -27,8 +29,14 @@ Deal dealFromRow(Map<String, dynamic> row) {
     availableSlots: (row['available_slots'] as num).toInt(),
     totalSlots: (row['total_slots'] as num).toInt(),
     pickupLocation: row['pickup_location'] as String,
-    status: _dealStatusFromValue(row['status'] as String),
     closesAt: closesAt == null ? null : DateTime.parse(closesAt).toLocal(),
+    purchasedAt:
+        purchasedAt == null ? null : DateTime.parse(purchasedAt).toLocal(),
+    cancelledAt:
+        cancelledAt == null ? null : DateTime.parse(cancelledAt).toLocal(),
+    // Absent on the raw deals row an insert returns; deal_feed carries them.
+    paidCount: (row['paid_count'] as num?)?.toInt() ?? 0,
+    collectedCount: (row['collected_count'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -44,15 +52,6 @@ DealUnit _dealUnitFromValue(String value) {
     (unit) => unit.name == value,
     orElse: () => throw StateError('Unknown deal unit "$value".'),
   );
-}
-
-DealStatus _dealStatusFromValue(String value) {
-  return switch (value) {
-    'open' => DealStatus.open,
-    'filling_fast' => DealStatus.fillingFast,
-    'full' => DealStatus.full,
-    _ => throw StateError('Unknown deal status "$value".'),
-  };
 }
 
 /// Split Board deal-feed contract. Backed by [MockDealRepository] in tests and
@@ -77,11 +76,16 @@ class DealFailure implements Exception {
 /// In-memory stand-in. Deals are stubbed per hub so the Split Board renders
 /// with placeholder cards in tests.
 class MockDealRepository implements DealRepository {
+  /// Between them the seeds walk the lifecycle — Open, Filling fast, Full,
+  /// Ready to purchase — so the statuses are visible when the app runs on mock
+  /// data. Every one of them has a host, and a host's slot is paid from the
+  /// moment the deal exists, so no seed can have participants and nobody paid.
   MockDealRepository()
     : _dealsByHub = {
         'colon': [
           Deal(
             id: 'colon-rice',
+            createdBy: 'marco',
             hostName: 'Marco Villanueva',
             hubId: 'colon',
             title: '25kg Rice Sack — Split 5 ways',
@@ -92,11 +96,13 @@ class MockDealRepository implements DealRepository {
             availableSlots: 3,
             totalSlots: 5,
             pickupLocation: 'USJR Main Gate',
-            status: DealStatus.open,
+            paidCount: 1,
             closesAt: DateTime(2026, 7, 16),
           ),
+          // Down to its last slot.
           Deal(
             id: 'colon-water',
+            createdBy: 'bea',
             hostName: 'Bea Alonzo',
             hubId: 'colon',
             title: 'Bottled Water Case (24pk)',
@@ -104,14 +110,15 @@ class MockDealRepository implements DealRepository {
             amount: 24,
             unit: DealUnit.bottles,
             category: DealCategory.drinks,
-            availableSlots: 2,
+            availableSlots: 1,
             totalSlots: 4,
             pickupLocation: 'Colon Street Hub',
-            status: DealStatus.fillingFast,
+            paidCount: 2,
             closesAt: DateTime(2026, 7, 14),
           ),
           Deal(
             id: 'colon-detergent',
+            createdBy: 'rey',
             hostName: 'Rey Mercado',
             hubId: 'colon',
             title: 'Laundry Detergent 6L',
@@ -122,13 +129,15 @@ class MockDealRepository implements DealRepository {
             availableSlots: 0,
             totalSlots: 3,
             pickupLocation: 'Barangay Hall Lobby',
-            status: DealStatus.full,
+            // Full, and still waiting on one student's money.
+            paidCount: 2,
             closesAt: DateTime(2026, 7, 18),
           ),
         ],
         'magallanes': [
           Deal(
             id: 'magallanes-eggs',
+            createdBy: 'trina',
             hostName: 'Trina Lopez',
             hubId: 'magallanes',
             title: 'Egg Tray (30s) — Split 3 ways',
@@ -139,11 +148,14 @@ class MockDealRepository implements DealRepository {
             availableSlots: 1,
             totalSlots: 3,
             pickupLocation: 'Magallanes Residence Gate',
-            status: DealStatus.fillingFast,
+            paidCount: 1,
             closesAt: DateTime(2026, 7, 15),
           ),
+          // Full and everyone has paid, so it is waiting on Karl to go and buy
+          // the coffee.
           Deal(
             id: 'magallanes-coffee',
+            createdBy: 'karl',
             hostName: 'Karl Diaz',
             hubId: 'magallanes',
             title: '3-in-1 Coffee Bulk Pack',
@@ -151,10 +163,10 @@ class MockDealRepository implements DealRepository {
             amount: 60,
             unit: DealUnit.sachets,
             category: DealCategory.pantry,
-            availableSlots: 4,
+            availableSlots: 0,
             totalSlots: 6,
             pickupLocation: 'Tower A Lobby',
-            status: DealStatus.open,
+            paidCount: 6,
             closesAt: DateTime(2026, 7, 19),
           ),
         ],
@@ -184,7 +196,9 @@ class MockDealRepository implements DealRepository {
       availableSlots: draft.totalSlots - 1,
       totalSlots: draft.totalSlots,
       pickupLocation: draft.pickupLocation.trim(),
-      status: DealStatus.open,
+      // A new deal has exactly one participant, the host, and the host's slot is
+      // paid from the moment it exists — they cannot pay themselves.
+      paidCount: 1,
       closesAt: draft.closesAt,
     );
 
@@ -258,10 +272,12 @@ class SupabaseDealRepository implements DealRepository {
         'unit': draft.unit.name,
         'total_slots': draft.totalSlots,
         'pickup_location': draft.pickupLocation.trim(),
-        'status': _statusValue(DealStatus.open),
         'closes_at': draft.closesAt?.toIso8601String(),
       });
-      return dealFromRow(row);
+      // The insert returns the raw deals row, which carries no counts. The
+      // trigger has just given the host their slot, and a host's slot is paid
+      // from the moment it exists -- they cannot pay themselves.
+      return dealFromRow(row).copyWith(paidCount: 1);
     } on PostgrestException catch (error) {
       throw DealFailure(_messageFor(error));
     }
@@ -281,13 +297,5 @@ class SupabaseDealRepository implements DealRepository {
       return 'Check the price, amount and slots, then try again.';
     }
     return 'Could not publish the deal. Please try again.';
-  }
-
-  String _statusValue(DealStatus status) {
-    return switch (status) {
-      DealStatus.open => 'open',
-      DealStatus.fillingFast => 'filling_fast',
-      DealStatus.full => 'full',
-    };
   }
 }

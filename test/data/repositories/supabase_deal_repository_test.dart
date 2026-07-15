@@ -21,7 +21,6 @@ void main() {
             'available_slots': 3,
             'total_slots': 5,
             'pickup_location': 'USJR Main Gate',
-            'status': 'open',
             'closes_at': '2026-07-16T15:59:00.000Z',
             'created_by': 'user-9',
             'host_name': 'Marco Villanueva',
@@ -46,6 +45,77 @@ void main() {
     expect(deals.single.hostName, 'Marco Villanueva');
   });
 
+  // The whole database-to-status seam: the timestamps that end a deal's life
+  // and the counts the status is read from all arrive as raw feed columns.
+  test('reads a deal_feed row far enough to derive its status', () {
+    final deal = dealFromRow({
+      'id': 'deal-3',
+      'hub_id': 'colon',
+      'title': 'Laundry Detergent 6L',
+      'category': 'household',
+      'total_price': 360,
+      'amount': 6,
+      'unit': 'litre',
+      'available_slots': 0,
+      'total_slots': 3,
+      'pickup_location': 'Barangay Hall Lobby',
+      'purchased_at': '2026-07-16T02:00:00.000Z',
+      'paid_count': 3,
+      'collected_count': 3,
+    });
+
+    expect(deal.purchasedAt, isNotNull);
+    expect(deal.purchasedAt!.isUtc, isFalse);
+    expect(deal.cancelledAt, isNull);
+    expect(deal.paidCount, 3);
+    expect(deal.collectedCount, 3);
+    expect(deal.status, DealStatus.completed);
+  });
+
+  // The two RPCs that end a deal return the same feed shape, cancelled_at set.
+  test('a cancelled row outranks everything else on it', () {
+    final deal = dealFromRow({
+      'id': 'deal-4',
+      'hub_id': 'colon',
+      'title': 'Cooking Oil 5L',
+      'category': 'pantry',
+      'total_price': 750,
+      'amount': 5,
+      'unit': 'litre',
+      'available_slots': 0,
+      'total_slots': 5,
+      'pickup_location': 'USJR Main Gate',
+      'purchased_at': '2026-07-16T02:00:00.000Z',
+      'cancelled_at': '2026-07-17T02:00:00.000Z',
+      'paid_count': 5,
+      'collected_count': 5,
+    });
+
+    expect(deal.cancelledAt, isNotNull);
+    expect(deal.status, DealStatus.cancelled);
+  });
+
+  // A raw deals row -- what an insert returns -- carries none of these columns.
+  test('a row with no counts on it is not a deal nobody paid for', () {
+    final deal = dealFromRow({
+      'id': 'deal-5',
+      'hub_id': 'colon',
+      'title': 'Egg Tray',
+      'category': 'grocery',
+      'total_price': 255,
+      'amount': 30,
+      'unit': 'pieces',
+      'available_slots': 2,
+      'total_slots': 3,
+      'pickup_location': 'Magallanes Residence Gate',
+    });
+
+    expect(deal.paidCount, 0);
+    expect(deal.collectedCount, 0);
+    expect(deal.purchasedAt, isNull);
+    expect(deal.status, DealStatus.open);
+  });
+
   test('falls back when the deal_feed row has no host name', () async {
     final repository = SupabaseDealRepository(
       gateway: _FakeSupabaseDealGateway(
@@ -61,7 +131,6 @@ void main() {
             'available_slots': 5,
             'total_slots': 5,
             'pickup_location': 'USJR Main Gate',
-            'status': 'open',
             'host_name': null,
           },
         ],
@@ -101,12 +170,18 @@ void main() {
     expect(gateway.insertedValues!['category'], 'pantry');
     expect(gateway.insertedValues!['amount'], 5);
     expect(gateway.insertedValues!['unit'], 'litre');
-    expect(gateway.insertedValues!['status'], 'open');
+    // status is not sent either: it is derived from the deal's facts, and the
+    // column it used to be written to is going away.
+    expect(gateway.insertedValues!.containsKey('status'), isFalse);
     // available_slots is not sent -- the deals_set_available_slots trigger
     // owns that column, seating the host in one of the slots.
     expect(gateway.insertedValues!.containsKey('available_slots'), isFalse);
     expect(deal.availableSlots, 4);
     expect(deal.status, DealStatus.open);
+    // The trigger seats the host in a slot that is paid from the moment it
+    // exists, but the raw row an insert returns carries no counts to say so.
+    expect(deal.paidCount, 1);
+    expect(deal.studentsWhoPaid, 0);
   });
 
   test('reports a refused insert as a permission failure', () async {

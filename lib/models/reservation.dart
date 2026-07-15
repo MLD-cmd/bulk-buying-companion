@@ -6,6 +6,8 @@ class Reservation {
     required this.reservedAt,
     this.studentName,
     this.isHost = false,
+    this.paidAt,
+    this.collectedAt,
   });
 
   final String dealId;
@@ -18,6 +20,17 @@ class Reservation {
 
   /// The student organising the buy. Their slot cannot be cancelled.
   final bool isHost;
+
+  /// When this student handed the host their share. The host's own slot is paid
+  /// from the moment the deal exists — they cannot pay themselves.
+  final DateTime? paidAt;
+
+  /// When this student took their goods away. Only ever set after the host has
+  /// bought them.
+  final DateTime? collectedAt;
+
+  bool get hasPaid => paidAt != null;
+  bool get hasCollected => collectedAt != null;
 
   /// What to call the student when their name is unknown, rather than leaving
   /// a gap where a person should be.

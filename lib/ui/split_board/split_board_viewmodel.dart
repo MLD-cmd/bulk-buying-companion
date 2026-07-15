@@ -38,8 +38,11 @@ class SplitBoardViewModel extends ChangeNotifier {
           deal.title.toLowerCase().contains(normalizedQuery);
       final matchesCategory =
           _categoryFilter == null || deal.category == _categoryFilter;
-      final matchesStatus =
-          _statusFilter == null || deal.status == _statusFilter;
+      // Completed and cancelled deals are not open business. They stay
+      // reachable through the filter, but they do not clutter the board.
+      final matchesStatus = _statusFilter == null
+          ? !deal.status.isFinished
+          : deal.status == _statusFilter;
       return matchesSearch && matchesCategory && matchesStatus;
     }).toList();
 
