@@ -42,18 +42,90 @@ class DealDetailsViewModel extends ChangeNotifier {
     return closesAt != null && !closesAt.isAfter(DateTime.now());
   }
 
-  /// The host is the person everyone else is relying on, so they cannot walk
-  /// away from their own buy; and past the deadline the host is about to spend
-  /// real money against a count that must now be final.
-  bool get canCancel => holdsSlot && !isHost && !deadlinePassed;
+  bool get isCancelled => _deal.status == DealStatus.cancelled;
+  bool get isCompleted => _deal.status == DealStatus.completed;
+  bool get isPurchased => _deal.purchasedAt != null;
 
-  bool get canReserve => !holdsSlot && !isFull && !deadlinePassed;
+  /// Once the host has bought or called it off, the count they spent money
+  /// against is final: nobody joins and nobody leaves.
+  bool get isClosed => isPurchased || isCancelled;
+
+  bool get currentUserHasPaid => _participants.any(
+    (participant) => participant.userId == currentUserId && participant.hasPaid,
+  );
+
+  /// The host is the person everyone else is relying on, so they cannot walk
+  /// away from their own buy; past the deadline the host is about to spend real
+  /// money against a count that must now be final; and a student who has paid
+  /// would be leaving the host holding money they owe back.
+  bool get canCancel =>
+      holdsSlot &&
+      !isHost &&
+      !deadlinePassed &&
+      !isClosed &&
+      !currentUserHasPaid;
+
+  bool get canReserve => !holdsSlot && !isFull && !deadlinePassed && !isClosed;
+
+  /// The host's levers. The screen offers "I've bought it" from Full onward —
+  /// the normal path — though the database does not insist on it.
+  bool get canMarkPurchased => isHost && isFull && !isPurchased && !isCancelled;
+  bool get canCancelDeal => isHost && !isCompleted && !isCancelled;
+
+  /// A payment can be recorded at any point until the deal is cancelled -- a
+  /// student who settles up late, after pickup, still gets ticked off.
+  bool get canMarkPaid => isHost && !isCancelled;
+  bool get canMarkCollected => isHost && isPurchased && !isCancelled;
+
+  /// What the host is still owed. The host's own slot counts as paid — they
+  /// cannot pay themselves — so it is in the tally but not in the money.
+  String get paymentLabel {
+    final total = _deal.participantCount;
+    final paid = _deal.paidCount;
+    if (paid >= total) return 'Everyone has paid.';
+    final owed = (total - paid) * _deal.pricePerShare;
+    return '$paid of $total paid — ${formatPeso(owed)} still to collect';
+  }
+
+  /// Named in the cancel dialog before the host is allowed to go through with
+  /// it. Null when there is nothing to hand back.
+  String? get refundWarning {
+    final students = _deal.studentsWhoPaid;
+    if (students == 0) return null;
+    final plural = students == 1 ? 'student has' : 'students have';
+    return '$students $plural paid you ${formatPeso(_deal.amountHeld)}.';
+  }
 
   Future<void> reserve() =>
       _mutate(() => _reservationRepository.reserveSlot(_deal.id));
 
   Future<void> cancel() =>
       _mutate(() => _reservationRepository.cancelReservation(_deal.id));
+
+  Future<void> setPaid(String userId, {required bool paid}) => _mutate(
+    () => _reservationRepository.setPaid(_deal.id, userId, paid: paid),
+  );
+
+  Future<void> setCollected(String userId, {required bool collected}) =>
+      _mutate(
+        () => _reservationRepository.setCollected(
+          _deal.id,
+          userId,
+          collected: collected,
+        ),
+      );
+
+  Future<void> markPurchased() =>
+      _mutate(() => _reservationRepository.markPurchased(_deal.id));
+
+  Future<void> cancelDeal() =>
+      _mutate(() => _reservationRepository.cancelDeal(_deal.id));
+
+  /// Test seam: adopt a deal changed outside this ViewModel.
+  void refreshDeal(Deal deal) {
+    _deal = deal;
+    notifyListeners();
+  }
 
   /// A second tap landing before the first call resolves would claim against a
   /// stale slot count. The button disables too; this is the backstop.
