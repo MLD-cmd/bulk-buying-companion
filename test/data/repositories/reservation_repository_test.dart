@@ -77,7 +77,10 @@ void main() {
     test('says the host cannot walk away from their own buy', () async {
       final repository = SupabaseReservationRepository(
         gateway: _FailingGateway(
-          const PostgrestException(message: 'Host cannot cancel.', code: 'P0003'),
+          const PostgrestException(
+            message: 'Host cannot cancel.',
+            code: 'P0003',
+          ),
         ),
       );
 
@@ -88,6 +91,28 @@ void main() {
             (failure) => failure.message,
             'message',
             'You are organising this buy, so your slot cannot be cancelled.',
+          ),
+        ),
+      );
+    });
+
+    test('says the host slot is always paid', () async {
+      final repository = SupabaseReservationRepository(
+        gateway: _FailingGateway(
+          const PostgrestException(
+            message: 'Host slot is always paid.',
+            code: 'P0013',
+          ),
+        ),
+      );
+
+      expect(
+        () => repository.setPaid('deal-1', 'user-1', paid: false),
+        throwsA(
+          isA<ReservationFailure>().having(
+            (failure) => failure.message,
+            'message',
+            'The host slot is always paid.',
           ),
         ),
       );
@@ -203,42 +228,51 @@ void main() {
       );
     });
 
-    test('marking every student paid makes a full deal ready to purchase', () async {
-      await repository.reserveSlotFor('ana');
-      await repository.reserveSlotFor('bea');
-      await repository.reserveSlotFor('cy');
-      expect(repository.deal.status, DealStatus.full);
+    test(
+      'marking every student paid makes a full deal ready to purchase',
+      () async {
+        await repository.reserveSlotFor('ana');
+        await repository.reserveSlotFor('bea');
+        await repository.reserveSlotFor('cy');
+        expect(repository.deal.status, DealStatus.full);
 
-      await repository.setPaid('d', 'ana', paid: true);
-      await repository.setPaid('d', 'bea', paid: true);
-      final deal = await repository.setPaid('d', 'cy', paid: true);
+        await repository.setPaid('d', 'ana', paid: true);
+        await repository.setPaid('d', 'bea', paid: true);
+        final deal = await repository.setPaid('d', 'cy', paid: true);
 
-      expect(deal.status, DealStatus.readyToPurchase);
-    });
+        expect(deal.status, DealStatus.readyToPurchase);
+      },
+    );
 
-    test('unmarking a payment takes it back out of ready to purchase', () async {
-      await repository.reserveSlotFor('ana');
-      await repository.reserveSlotFor('bea');
-      await repository.reserveSlotFor('cy');
-      await repository.setPaid('d', 'ana', paid: true);
-      await repository.setPaid('d', 'bea', paid: true);
-      await repository.setPaid('d', 'cy', paid: true);
+    test(
+      'unmarking a payment takes it back out of ready to purchase',
+      () async {
+        await repository.reserveSlotFor('ana');
+        await repository.reserveSlotFor('bea');
+        await repository.reserveSlotFor('cy');
+        await repository.setPaid('d', 'ana', paid: true);
+        await repository.setPaid('d', 'bea', paid: true);
+        await repository.setPaid('d', 'cy', paid: true);
 
-      final deal = await repository.setPaid('d', 'cy', paid: false);
-      expect(deal.status, DealStatus.full);
-    });
+        final deal = await repository.setPaid('d', 'cy', paid: false);
+        expect(deal.status, DealStatus.full);
+      },
+    );
 
-    test('buying makes it ready for pickup and collects the host share', () async {
-      // A student who has yet to collect keeps the deal at Ready for pickup;
-      // buying auto-collects only the host's own share, not theirs.
-      await repository.reserveSlotFor('ana');
-      final deal = await repository.markPurchased('d');
+    test(
+      'buying makes it ready for pickup and collects the host share',
+      () async {
+        // A student who has yet to collect keeps the deal at Ready for pickup;
+        // buying auto-collects only the host's own share, not theirs.
+        await repository.reserveSlotFor('ana');
+        final deal = await repository.markPurchased('d');
 
-      expect(deal.status, DealStatus.readyForPickup);
-      final participants = await repository.getParticipants('d');
-      final host = participants.firstWhere((p) => p.isHost);
-      expect(host.hasCollected, isTrue);
-    });
+        expect(deal.status, DealStatus.readyForPickup);
+        final participants = await repository.getParticipants('d');
+        final host = participants.firstWhere((p) => p.isHost);
+        expect(host.hasCollected, isTrue);
+      },
+    );
 
     test('goods cannot be collected before they are bought', () async {
       await repository.reserveSlotFor('ana');
@@ -283,27 +317,30 @@ void main() {
       );
     });
 
-    test('the paid student is blocked through the real cancelReservation', () async {
-      // Drives the production entry point rather than the seam, so the
-      // paid-check is pinned where it sits among the host and closed checks.
-      final ana = MockReservationRepository(
-        deal: hostedDeal(),
-        currentUserId: 'ana',
-      );
-      await ana.reserveSlot('d');
-      await ana.markPaidForTest('ana');
+    test(
+      'the paid student is blocked through the real cancelReservation',
+      () async {
+        // Drives the production entry point rather than the seam, so the
+        // paid-check is pinned where it sits among the host and closed checks.
+        final ana = MockReservationRepository(
+          deal: hostedDeal(),
+          currentUserId: 'ana',
+        );
+        await ana.reserveSlot('d');
+        await ana.markPaidForTest('ana');
 
-      expect(
-        () => ana.cancelReservation('d'),
-        throwsA(
-          isA<ReservationFailure>().having(
-            (failure) => failure.message,
-            'message',
-            'You have already paid for this slot. Ask the host before you pull out.',
+        expect(
+          () => ana.cancelReservation('d'),
+          throwsA(
+            isA<ReservationFailure>().having(
+              (failure) => failure.message,
+              'message',
+              'You have already paid for this slot. Ask the host before you pull out.',
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('a student who is not the host cannot mark anyone paid', () async {
       final ana = MockReservationRepository(
@@ -315,14 +352,22 @@ void main() {
         () => ana.setPaid('d', 'ana', paid: true),
         throwsA(isA<ReservationFailure>()),
       );
+      expect(() => ana.markPurchased('d'), throwsA(isA<ReservationFailure>()));
+      expect(() => ana.cancelDeal('d'), throwsA(isA<ReservationFailure>()));
+    });
+
+    test('the host cannot unpay themselves', () async {
       expect(
-        () => ana.markPurchased('d'),
-        throwsA(isA<ReservationFailure>()),
+        () => repository.setPaid('d', 'host', paid: false),
+        throwsA(
+          isA<ReservationFailure>().having(
+            (failure) => failure.message,
+            'message',
+            'The host slot is always paid.',
+          ),
+        ),
       );
-      expect(
-        () => ana.cancelDeal('d'),
-        throwsA(isA<ReservationFailure>()),
-      );
+      expect(repository.deal.paidCount, 1);
     });
   });
 }
@@ -368,7 +413,8 @@ class _StubGateway implements SupabaseReservationGateway {
   Future<Map<String, dynamic>> reserveSlot(String dealId) async => dealRow;
 
   @override
-  Future<Map<String, dynamic>> cancelReservation(String dealId) async => dealRow;
+  Future<Map<String, dynamic>> cancelReservation(String dealId) async =>
+      dealRow;
 
   @override
   Future<Map<String, dynamic>> setParticipantPaid(

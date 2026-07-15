@@ -103,11 +103,18 @@ where exists (
 grant select on public.deal_feed to authenticated;
 
 -- Nothing reads it, and every row holds the default. No information is lost.
--- Dropping the column drops deals_status_check with it.
-alter table public.deals drop column status;
+-- Dropping the column drops deals_status_check with it. `if exists` keeps the
+-- migration rerunnable if a manual SQL-editor apply fails after this point.
+alter table public.deals drop column if exists status;
 
 -- Who is in a deal, and where each of them stands.
-create or replace view public.deal_participants as
+--
+-- Drop + create, not create-or-replace: adding paid_at/collected_at before
+-- student_name changes the view column order, and Postgres treats that as
+-- renaming "student_name" to "paid_at".
+drop view if exists public.deal_participants;
+
+create view public.deal_participants as
 select
   r.deal_id,
   r.user_id,
@@ -310,8 +317,14 @@ begin
     raise exception 'Deal is closed.' using errcode = 'P0006';
   end if;
 
+  if p_user_id = v_deal.created_by and not p_paid then
+    raise exception 'Host slot is always paid.' using errcode = 'P0013';
+  end if;
+
   -- Unmarking is allowed: a host who mis-taps must be able to take it back, and
-  -- a student cannot leave a deal they are marked paid for until they do.
+  -- a student cannot leave a deal they are marked paid for until they do. The
+  -- host's own slot is the exception: it is paid from creation, because they
+  -- cannot pay themselves.
   update public.deal_reservations
   set paid_at = case when p_paid then now() else null end
   where deal_id = p_deal_id and user_id = p_user_id;

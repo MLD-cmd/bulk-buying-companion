@@ -136,10 +136,7 @@ class PostgrestSupabaseReservationGateway
 
   @override
   Future<Map<String, dynamic>> cancelDeal(String dealId) async {
-    final row = await _client.rpc(
-      'cancel_deal',
-      params: {'p_deal_id': dealId},
-    );
+    final row = await _client.rpc('cancel_deal', params: {'p_deal_id': dealId});
     return Map<String, dynamic>.from(row as Map);
   }
 
@@ -249,8 +246,9 @@ class SupabaseReservationRepository implements ReservationRepository {
       isHost: row['is_host'] as bool? ?? false,
       reservedAt: DateTime.parse(row['reserved_at'] as String).toLocal(),
       paidAt: paidAt == null ? null : DateTime.parse(paidAt).toLocal(),
-      collectedAt:
-          collectedAt == null ? null : DateTime.parse(collectedAt).toLocal(),
+      collectedAt: collectedAt == null
+          ? null
+          : DateTime.parse(collectedAt).toLocal(),
     );
   }
 
@@ -274,6 +272,7 @@ class SupabaseReservationRepository implements ReservationRepository {
       'P0011' =>
         'You have already paid for this slot. Ask the host before you pull out.',
       'P0012' => 'Only the host can do that.',
+      'P0013' => 'The host slot is always paid.',
       _ => 'Could not update your slot. Please try again.',
     };
   }
@@ -358,8 +357,9 @@ class MockReservationRepository implements ReservationRepository {
             isHost: userId == _deal.createdBy,
             reservedAt: DateTime(2026, 7, 14),
             paidAt: _paid.contains(userId) ? DateTime(2026, 7, 14) : null,
-            collectedAt:
-                _collected.contains(userId) ? DateTime(2026, 7, 15) : null,
+            collectedAt: _collected.contains(userId)
+                ? DateTime(2026, 7, 15)
+                : null,
           ),
         )
         .toList();
@@ -397,6 +397,9 @@ class MockReservationRepository implements ReservationRepository {
     _requireNotCancelled();
     if (!_holders.contains(userId)) {
       throw const ReservationFailure('You do not have a slot in this deal.');
+    }
+    if (userId == _deal.createdBy && !paid) {
+      throw const ReservationFailure('The host slot is always paid.');
     }
     paid ? _paid.add(userId) : _paid.remove(userId);
     return _sync();

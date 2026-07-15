@@ -201,12 +201,24 @@ void main() {
     final participants = find.byKey(const Key('detail-participants'));
     expect(participants, findsOneWidget);
     expect(
-      find.descendant(of: participants, matching: find.text('Marco Villanueva')),
+      find.descendant(
+        of: participants,
+        matching: find.text('Marco Villanueva'),
+      ),
       findsOneWidget,
     );
     expect(
       find.descendant(of: participants, matching: find.text('(organiser)')),
       findsOneWidget,
+    );
+
+    final organiser = tester.widget<Text>(
+      find.descendant(of: participants, matching: find.text('(organiser)')),
+    );
+    expect(
+      organiser.style?.color,
+      isNotNull,
+      reason: 'The organiser note should stay visually quieter than the name.',
     );
   });
 
@@ -245,11 +257,7 @@ void main() {
     );
     await repository.reserveSlotFor('ana');
 
-    await pumpDetailsWith(
-      tester,
-      repository: repository,
-      currentUserId: 'ana',
-    );
+    await pumpDetailsWith(tester, repository: repository, currentUserId: 'ana');
 
     expect(find.byKey(const Key('mark-paid-ana')), findsNothing);
     expect(find.byKey(const Key('detail-mark-purchased-button')), findsNothing);
