@@ -298,14 +298,12 @@ select
   d.pickup_location, d.closes_at, d.created_at,
   d.purchased_at, d.cancelled_at,
   p.display_name as host_name,
-  c.participant_count,
   c.paid_count,
   c.collected_count
 from public.deals d
 left join public.profiles p on p.user_id = d.created_by
 left join lateral (
   select
-    count(*)                as participant_count,
     count(r.paid_at)        as paid_count,
     count(r.collected_at)   as collected_count
   from public.deal_reservations r
