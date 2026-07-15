@@ -26,4 +26,24 @@ void main() {
     expect(reservation.displayName, 'A student in this hub');
     expect(reservation.isHost, isFalse);
   });
+
+  test('a reservation knows whether it is paid and collected', () {
+    final unpaid = Reservation(
+      dealId: 'd',
+      userId: 'u',
+      reservedAt: DateTime(2026, 7, 16),
+    );
+    expect(unpaid.hasPaid, isFalse);
+    expect(unpaid.hasCollected, isFalse);
+
+    final settled = Reservation(
+      dealId: 'd',
+      userId: 'u',
+      reservedAt: DateTime(2026, 7, 16),
+      paidAt: DateTime(2026, 7, 16),
+      collectedAt: DateTime(2026, 7, 17),
+    );
+    expect(settled.hasPaid, isTrue);
+    expect(settled.hasCollected, isTrue);
+  });
 }

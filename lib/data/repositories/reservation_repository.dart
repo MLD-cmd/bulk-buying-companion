@@ -111,12 +111,17 @@ class SupabaseReservationRepository implements ReservationRepository {
   }
 
   Reservation _reservationFromRow(Map<String, dynamic> row) {
+    final paidAt = row['paid_at'] as String?;
+    final collectedAt = row['collected_at'] as String?;
     return Reservation(
       dealId: row['deal_id'] as String,
       userId: row['user_id'] as String,
       studentName: row['student_name'] as String?,
       isHost: row['is_host'] as bool? ?? false,
       reservedAt: DateTime.parse(row['reserved_at'] as String).toLocal(),
+      paidAt: paidAt == null ? null : DateTime.parse(paidAt).toLocal(),
+      collectedAt:
+          collectedAt == null ? null : DateTime.parse(collectedAt).toLocal(),
     );
   }
 
