@@ -97,7 +97,7 @@ class DealDetailsScreen extends StatelessWidget {
                   _SectionLabel('Who is in'),
                   _Participants(
                     key: const Key('detail-participants'),
-                    participants: viewModel.participants,
+                    viewModel: viewModel,
                   ),
                   const SizedBox(height: 24),
 
@@ -127,7 +127,7 @@ class DealDetailsScreen extends StatelessWidget {
                     const SizedBox(height: 12),
                   ],
 
-                  if (viewModel.isHost)
+                  if (viewModel.isHost) ...[
                     Container(
                       key: const Key('detail-host-slot-note'),
                       padding: const EdgeInsets.all(14),
@@ -139,14 +139,51 @@ class DealDetailsScreen extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        'You are organising this buy, so one slot is yours. '
-                        'To pull out you would have to cancel the whole deal.',
+                        'You are organising this buy, so one slot is yours.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    )
-                  else
+                    ),
+                    if (viewModel.canMarkPurchased) ...[
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        key: const Key('detail-mark-purchased-button'),
+                        onPressed: viewModel.isUpdating
+                            ? null
+                            : viewModel.markPurchased,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                          backgroundColor: AppTheme.accent,
+                          foregroundColor: Colors.white,
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        child: const Text("I've bought it"),
+                      ),
+                    ],
+                    if (viewModel.canCancelDeal) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        key: const Key('detail-cancel-deal-button'),
+                        onPressed: viewModel.isUpdating
+                            ? null
+                            : () => _confirmCancel(context, viewModel),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                          foregroundColor: theme.colorScheme.error,
+                          side: BorderSide(color: theme.colorScheme.error),
+                          textStyle: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        child: const Text('Cancel this deal'),
+                      ),
+                    ],
+                  ] else
                     FilledButton(
                       key: const Key('detail-reserve-button'),
                       onPressed: viewModel.isUpdating
@@ -181,6 +218,55 @@ class DealDetailsScreen extends StatelessWidget {
     if (viewModel.isFull) return 'No slots left';
     if (viewModel.deadlinePassed) return 'Deadline passed';
     return 'Reserve a slot';
+  }
+
+  /// The app never moves money. What it refuses to do is let the host cancel
+  /// while pretending nobody paid.
+  Future<void> _confirmCancel(
+    BuildContext context,
+    DealDetailsViewModel viewModel,
+  ) async {
+    final warning = viewModel.refundWarning;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this deal?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (warning != null) ...[
+              Text(
+                warning,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Cancelling does not refund them — you will have to hand it '
+                'back yourself.',
+              ),
+            ] else
+              const Text(
+                'Nobody has paid you yet, so there is nothing to hand back. '
+                'The deal will close and its slots will be released.',
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep the deal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Cancel the deal'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) await viewModel.cancelDeal();
   }
 }
 
@@ -324,13 +410,14 @@ class _SlotsRow extends StatelessWidget {
 }
 
 class _Participants extends StatelessWidget {
-  const _Participants({super.key, required this.participants});
+  const _Participants({super.key, required this.viewModel});
 
-  final List<Reservation> participants;
+  final DealDetailsViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final participants = viewModel.participants;
 
     if (participants.isEmpty) {
       return Text(
@@ -346,7 +433,7 @@ class _Participants extends StatelessWidget {
       children: [
         for (final participant in participants)
           Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
                 Icon(
@@ -357,23 +444,152 @@ class _Participants extends StatelessWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  participant.displayName,
-                  style: theme.textTheme.bodyMedium,
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          participant.displayName,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (participant.isHost) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '(organiser)',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                if (participant.isHost) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    '(organiser)',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                _PaidControl(viewModel: viewModel, participant: participant),
+                if (viewModel.isPurchased) ...[
+                  const SizedBox(width: 8),
+                  _CollectedControl(
+                    viewModel: viewModel,
+                    participant: participant,
                   ),
                 ],
               ],
             ),
           ),
+        const SizedBox(height: 4),
+        Text(
+          viewModel.paymentLabel,
+          key: const Key('detail-payment-label'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
+    );
+  }
+}
+
+/// The host taps to mark a payment; everyone else just reads it.
+class _PaidControl extends StatelessWidget {
+  const _PaidControl({required this.viewModel, required this.participant});
+
+  final DealDetailsViewModel viewModel;
+  final Reservation participant;
+
+  @override
+  Widget build(BuildContext context) {
+    // The host's own slot is paid from the moment the deal exists, and they
+    // cannot unpay themselves.
+    if (!viewModel.canMarkPaid || participant.isHost) {
+      return _StateChip(
+        label: participant.hasPaid ? 'Paid' : 'Unpaid',
+        on: participant.hasPaid,
+      );
+    }
+
+    return TextButton(
+      key: Key('mark-paid-${participant.userId}'),
+      onPressed: viewModel.isUpdating
+          ? null
+          : () => viewModel.setPaid(
+              participant.userId,
+              paid: !participant.hasPaid,
+            ),
+      child: _StateChip(
+        label: participant.hasPaid ? 'Paid' : 'Mark paid',
+        on: participant.hasPaid,
+      ),
+    );
+  }
+}
+
+/// The host taps to mark a pickup; everyone else just reads it.
+class _CollectedControl extends StatelessWidget {
+  const _CollectedControl({
+    required this.viewModel,
+    required this.participant,
+  });
+
+  final DealDetailsViewModel viewModel;
+  final Reservation participant;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!viewModel.canMarkCollected || participant.isHost) {
+      return _StateChip(
+        label: participant.hasCollected ? 'Collected' : 'Not collected',
+        on: participant.hasCollected,
+      );
+    }
+
+    return TextButton(
+      key: Key('mark-collected-${participant.userId}'),
+      onPressed: viewModel.isUpdating
+          ? null
+          : () => viewModel.setCollected(
+              participant.userId,
+              collected: !participant.hasCollected,
+            ),
+      child: _StateChip(
+        label: participant.hasCollected ? 'Collected' : 'Mark collected',
+        on: participant.hasCollected,
+      ),
+    );
+  }
+}
+
+class _StateChip extends StatelessWidget {
+  const _StateChip({required this.label, required this.on});
+
+  final String label;
+  final bool on;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: on
+            ? const Color(0xFFDCEFE3)
+            : theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: on
+              ? const Color(0xFF7FB99A)
+              : theme.colorScheme.outlineVariant,
+        ),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: on
+              ? const Color(0xFF173E28)
+              : theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 }

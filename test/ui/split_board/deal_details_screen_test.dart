@@ -40,6 +40,51 @@ void main() {
     await tester.pump();
   }
 
+  Future<void> pumpDetailsWith(
+    WidgetTester tester, {
+    required MockReservationRepository repository,
+    required String currentUserId,
+  }) async {
+    // Tall enough that the whole scrollable body renders onstage, so plain
+    // find.text / find.byKey see it without a manual scroll.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider(
+          create: (_) => DealDetailsViewModel(
+            deal: repository.deal,
+            currentUserId: currentUserId,
+            reservationRepository: repository,
+          ),
+          child: const DealDetailsScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+  }
+
+  Deal hostedDeal({required int availableSlots, required int totalSlots}) {
+    return Deal(
+      id: 'd',
+      hubId: 'h',
+      createdBy: 'host',
+      hostName: 'Marco Villanueva',
+      title: 'Rice',
+      category: DealCategory.grocery,
+      totalPrice: 400,
+      amount: 20,
+      unit: DealUnit.kg,
+      availableSlots: availableSlots,
+      totalSlots: totalSlots,
+      pickupLocation: 'Lobby',
+      paidCount: 1,
+    );
+  }
+
   testWidgets('shows the product, host, cost, slots and pickup details', (
     tester,
   ) async {
@@ -157,6 +202,166 @@ void main() {
     expect(participants, findsOneWidget);
     expect(
       find.descendant(of: participants, matching: find.text('Marco Villanueva')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: participants, matching: find.text('(organiser)')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the host sees who has paid, and what is left to collect', (
+    tester,
+  ) async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'host',
+    );
+    await repository.reserveSlotFor('ana');
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'host',
+    );
+
+    expect(find.text('1 of 2 paid — P100 still to collect'), findsOneWidget);
+    expect(find.byKey(const Key('mark-paid-ana')), findsOneWidget);
+
+    // The host cannot unpay themselves: their own row is a bare chip, never a
+    // button. This widget-level guard is the only thing enforcing that.
+    expect(find.byKey(const Key('mark-paid-host')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('mark-paid-ana')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Everyone has paid.'), findsOneWidget);
+  });
+
+  testWidgets('a student sees the state but cannot change it', (tester) async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'ana',
+    );
+    await repository.reserveSlotFor('ana');
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'ana',
+    );
+
+    expect(find.byKey(const Key('mark-paid-ana')), findsNothing);
+    expect(find.byKey(const Key('detail-mark-purchased-button')), findsNothing);
+    expect(find.byKey(const Key('detail-cancel-deal-button')), findsNothing);
+  });
+
+  testWidgets('cancelling warns the host what they owe back', (tester) async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'host',
+    );
+    await repository.reserveSlotFor('ana');
+    await repository.markPaidForTest('ana');
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'host',
+    );
+
+    final cancelButton = find.byKey(const Key('detail-cancel-deal-button'));
+    await tester.ensureVisible(cancelButton);
+    await tester.tap(cancelButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 student has paid you P100.'), findsOneWidget);
+    expect(
+      find.text(
+        'Cancelling does not refund them — you will have to hand it back '
+        'yourself.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cancel the deal'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cancelled'), findsOneWidget);
+  });
+
+  testWidgets('the host can back out of cancelling', (tester) async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'host',
+    );
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'host',
+    );
+
+    final cancelButton = find.byKey(const Key('detail-cancel-deal-button'));
+    await tester.ensureVisible(cancelButton);
+    await tester.tap(cancelButton);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Keep the deal'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cancelled'), findsNothing);
+    expect(find.text('Open'), findsOneWidget);
+  });
+
+  testWidgets('collection stays hidden until the goods are bought', (
+    tester,
+  ) async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 1, totalSlots: 2),
+      currentUserId: 'host',
+    );
+    await repository.reserveSlotFor('ana');
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'host',
+    );
+
+    // Not bought yet, so there is nothing to collect.
+    expect(find.byKey(const Key('mark-collected-ana')), findsNothing);
+    expect(find.text('Collected'), findsNothing);
+    expect(find.text('Mark collected'), findsNothing);
+  });
+
+  testWidgets('once bought, the host ticks off who has collected', (
+    tester,
+  ) async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 1, totalSlots: 2),
+      currentUserId: 'host',
+    );
+    await repository.reserveSlotFor('ana');
+    await repository.markPurchased('d');
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'host',
+    );
+
+    final anaCollected = find.byKey(const Key('mark-collected-ana'));
+    expect(anaCollected, findsOneWidget);
+    // The host's own share is collected the moment they buy; Ana's is not.
+    expect(find.text('Mark collected'), findsOneWidget);
+
+    await tester.tap(anaCollected);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mark collected'), findsNothing);
+    expect(
+      find.descendant(of: anaCollected, matching: find.text('Collected')),
       findsOneWidget,
     );
   });
