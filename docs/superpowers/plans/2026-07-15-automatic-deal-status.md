@@ -1504,10 +1504,14 @@ class MockReservationRepository implements ReservationRepository {
     return _sync(availableSlots: _deal.availableSlots + 1);
   }
 
-  /// Test seam: record a payment without being the host, so a student's own view
-  /// of a deal they have already paid for can be built. setPaid() refuses a
-  /// non-host caller, exactly as the database does.
-  Future<Deal> setPaidAsHost(String userId) async {
+  /// Test seam: record a payment directly, bypassing the host-only guard that
+  /// setPaid enforces, so a test can build a student's own view of a deal they
+  /// have already paid for. Not a production path -- nothing outside tests calls
+  /// this, and the host-only rule is proven against the real setPaid.
+  Future<Deal> markPaidForTest(String userId) async {
+    if (!_holders.contains(userId)) {
+      throw const ReservationFailure('You do not have a slot in this deal.');
+    }
     _paid.add(userId);
     return _sync();
   }
@@ -1782,7 +1786,7 @@ Add to `test/ui/split_board/deal_details_viewmodel_test.dart`:
       currentUserId: 'ana',
     );
     await repository.reserveSlotFor('ana');
-    await repository.setPaidAsHost('ana');
+    await repository.markPaidForTest('ana');
 
     final viewModel = DealDetailsViewModel(
       reservationRepository: repository,
@@ -1817,7 +1821,7 @@ Deal hostedDeal({required int availableSlots, required int totalSlots}) {
 }
 ```
 
-`setPaidAsHost` is the mock seam added in Task 4 — `setPaid` refuses a non-host
+`markPaidForTest` is the mock seam added in Task 4 — `setPaid` refuses a non-host
 caller, and this test's mock is acting as Ana.
 
 - [ ] **Step 2: Run them and watch them fail**
@@ -1989,7 +1993,7 @@ Add to `test/ui/split_board/deal_details_screen_test.dart`:
       currentUserId: 'host',
     );
     await repository.reserveSlotFor('ana');
-    await repository.setPaidAsHost('ana');
+    await repository.markPaidForTest('ana');
 
     await pumpDetailsWith(
       tester,
