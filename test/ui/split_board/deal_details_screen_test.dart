@@ -303,6 +303,7 @@ void main() {
 
     expect(find.text('1 of 2 paid — P100 still to collect'), findsOneWidget);
     expect(find.byKey(const Key('mark-paid-ana')), findsOneWidget);
+    expect(find.text('Mark paid'), findsOneWidget);
 
     // The host cannot unpay themselves: their own row is a bare chip, never a
     // button. This widget-level guard is the only thing enforcing that.
@@ -312,6 +313,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Everyone has paid.'), findsOneWidget);
+    expect(find.text('Unmark paid'), findsOneWidget);
   });
 
   testWidgets('the host sees manual payment instructions on the deal', (
@@ -476,34 +478,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Mark collected'), findsNothing);
+    expect(find.text('Unmark collected'), findsOneWidget);
     expect(
-      find.descendant(of: anaCollected, matching: find.text('Collected')),
+      find.descendant(
+        of: anaCollected,
+        matching: find.text('Unmark collected'),
+      ),
       findsOneWidget,
     );
     expect(find.text('All 2 pickups are collected.'), findsOneWidget);
     expect(find.textContaining('Collected '), findsNWidgets(2));
   });
 
-  testWidgets('a student can report the organiser from deal details', (
+  testWidgets('report action opens choices for deal or a visible user', (
     tester,
   ) async {
     final reportRepository = _RecordingReportRepository();
-    await pumpDetails(
+    final repository = MockReservationRepository(
+      deal: _reservableDeal,
+      currentUserId: 'user-2',
+    );
+    await repository.reserveSlotFor('user-2');
+    await repository.reserveSlotFor('ana');
+
+    await pumpDetailsWith(
       tester,
-      _reservableDeal,
+      repository: repository,
       currentUserId: 'user-2',
       reportRepository: reportRepository,
     );
+
+    expect(find.widgetWithText(TextButton, 'Report'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('detail-report-button')));
     await tester.pumpAndSettle();
 
     expect(find.text('Report deal or user'), findsOneWidget);
-    await tester.tap(find.text('Organiser'));
+    expect(find.text('Report this deal'), findsOneWidget);
+    await tester.tap(find.text('Report a user'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Marco Villanueva'), findsWidgets);
+    expect(find.text('Jayrald B. Tajanlangit'), findsWidgets);
+    expect(find.text('ana'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('report-user-ana')));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Inappropriate content'));
     await tester.enterText(
       find.byKey(const Key('report-explanation-field')),
-      'The organiser is asking for unrelated personal info.',
+      'This participant is harassing people in the pickup thread.',
     );
     await tester.tap(find.byKey(const Key('submit-report-button')));
     await tester.pumpAndSettle();
