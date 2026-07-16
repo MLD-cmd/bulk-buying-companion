@@ -197,6 +197,36 @@ void main() {
     expect(retries, 1);
   });
 
+  testWidgets('AppMessageState keeps a disabled semantic retry while busy', (
+    tester,
+  ) async {
+    var retries = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AppMessageState(
+            icon: Icons.cloud_off_outlined,
+            title: "Couldn't load deals",
+            message: 'Check your connection and try again.',
+            onRetry: () => retries++,
+            retryBusy: true,
+          ),
+        ),
+      ),
+    );
+
+    final retryButton = tester.widget<OutlinedButton>(
+      find.byType(OutlinedButton),
+    );
+    expect(retryButton.onPressed, isNull);
+    expect(find.text('Trying again…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.bySemanticsLabel('Trying again'), findsOneWidget);
+
+    await tester.tap(find.byType(OutlinedButton));
+    expect(retries, 0);
+  });
+
   testWidgets('AppFormSection and AppIconContainer keep content focused', (
     tester,
   ) async {

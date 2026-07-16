@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/deal_repository.dart';
@@ -24,6 +26,11 @@ class SplitBoardViewModel extends ChangeNotifier {
   List<Deal> _deals = [];
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isRefreshing = false;
+  String? _refreshErrorMessage;
+  Future<void>? _refreshOperation;
+  int _loadGeneration = 0;
+  bool _isDisposed = false;
   String _searchQuery = '';
   DealCategory? _categoryFilter;
   DealStatus? _statusFilter;
@@ -58,6 +65,8 @@ class SplitBoardViewModel extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
   bool get hasError => _hasError;
+  bool get isRefreshing => _isRefreshing;
+  String? get refreshErrorMessage => _refreshErrorMessage;
   String get searchQuery => _searchQuery;
   DealCategory? get categoryFilter => _categoryFilter;
   DealStatus? get statusFilter => _statusFilter;
@@ -68,81 +77,148 @@ class SplitBoardViewModel extends ChangeNotifier {
       _statusFilter != null;
 
   Future<void> _load() async {
+    if (_isDisposed) return;
+    final generation = ++_loadGeneration;
     _isLoading = true;
     _hasError = false;
-    notifyListeners();
+    _refreshErrorMessage = null;
+    _notifyListeners();
 
     try {
-      _deals = await _dealRepository.getDeals(_hubId);
+      final loadedDeals = await _dealRepository.getDeals(_hubId);
+      if (!_canCommit(generation)) return;
+      _deals = loadedDeals;
+      _hasError = false;
+      _refreshErrorMessage = null;
     } catch (_) {
+      if (!_canCommit(generation)) return;
       _hasError = true;
+      _refreshErrorMessage = null;
+    } finally {
+      if (_canCommit(generation)) {
+        _isLoading = false;
+        _notifyListeners();
+      }
     }
-    _isLoading = false;
-    notifyListeners();
   }
 
   /// Re-fetches the hub's deals. Wired to both the pull-to-refresh gesture
   /// and the retry action on the error state.
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    if (_isDisposed) return Future<void>.value();
+    final activeOperation = _refreshOperation;
+    if (activeOperation != null) return activeOperation;
+
+    final generation = ++_loadGeneration;
+    final completer = Completer<void>();
+    _refreshOperation = completer.future;
+    _isRefreshing = true;
+    _notifyListeners();
+
+    _refresh(
+      generation,
+    ).then((_) => completer.complete(), onError: completer.completeError);
+    return completer.future;
+  }
+
+  Future<void> _refresh(int generation) async {
     try {
-      _deals = await _dealRepository.getDeals(_hubId);
+      final loadedDeals = await _dealRepository.getDeals(_hubId);
+      if (!_canCommit(generation)) return;
+      _deals = loadedDeals;
       _hasError = false;
+      _refreshErrorMessage = null;
     } catch (_) {
-      _hasError = true;
+      if (!_canCommit(generation)) return;
+      if (_deals.isEmpty) {
+        _hasError = true;
+        _refreshErrorMessage = null;
+      } else {
+        _hasError = false;
+        _refreshErrorMessage =
+            'Couldn’t refresh deals. Showing the deals already loaded.';
+      }
+    } finally {
+      if (_canCommit(generation)) {
+        _isLoading = false;
+        _isRefreshing = false;
+        _refreshOperation = null;
+        _notifyListeners();
+      }
     }
-    notifyListeners();
   }
 
   void updateSearchQuery(String query) {
+    if (_isDisposed) return;
     if (_searchQuery == query) {
       return;
     }
     _searchQuery = query;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void updateCategoryFilter(DealCategory? category) {
+    if (_isDisposed) return;
     if (_categoryFilter == category) {
       return;
     }
     _categoryFilter = category;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void updateStatusFilter(DealStatus? status) {
+    if (_isDisposed) return;
     if (_statusFilter == status) {
       return;
     }
     _statusFilter = status;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void updateSortOption(DealSortOption option) {
+    if (_isDisposed) return;
     if (_sortOption == option) {
       return;
     }
     _sortOption = option;
-    notifyListeners();
+    _notifyListeners();
   }
 
   /// Swaps in a deal whose slot count changed while the student was looking at
   /// it, so the board does not keep showing the count it was pushed with.
   void replaceDeal(Deal deal) {
+    if (_isDisposed) return;
     final index = _deals.indexWhere((existing) => existing.id == deal.id);
     if (index == -1) return;
 
     _deals = [..._deals]..[index] = deal;
-    notifyListeners();
+    _notifyListeners();
   }
 
   void clearFilters() {
+    if (_isDisposed) return;
     if (!hasActiveFilters) {
       return;
     }
     _searchQuery = '';
     _categoryFilter = null;
     _statusFilter = null;
-    notifyListeners();
+    _notifyListeners();
+  }
+
+  bool _canCommit(int generation) =>
+      !_isDisposed && generation == _loadGeneration;
+
+  void _notifyListeners() {
+    if (!_isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _loadGeneration++;
+    super.dispose();
   }
 
   int _compareDeadlines(Deal a, Deal b) {

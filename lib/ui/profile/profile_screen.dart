@@ -32,10 +32,6 @@ class ProfileScreen extends StatelessWidget {
       body: SafeArea(
         child: Consumer<ProfileViewModel>(
           builder: (context, viewModel, _) {
-            if (viewModel.isLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
             final user = viewModel.user;
             if (user == null) {
               return const AppMessageState(
@@ -91,10 +87,13 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        _CurrentHubTile(hub: viewModel.currentHub),
-                        if (viewModel.errorMessage != null) ...[
+                        _CurrentHubSection(viewModel: viewModel),
+                        if (viewModel.signOutErrorMessage != null) ...[
                           const SizedBox(height: 16),
-                          AppBanner.error(message: viewModel.errorMessage!),
+                          AppBanner.error(
+                            key: const Key('profile-sign-out-error'),
+                            message: viewModel.signOutErrorMessage!,
+                          ),
                         ],
                         const SizedBox(height: 20),
                         OutlinedButton.icon(
@@ -152,6 +151,75 @@ class ProfileScreen extends StatelessWidget {
     if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
     return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
         .toUpperCase();
+  }
+}
+
+class _CurrentHubSection extends StatelessWidget {
+  const _CurrentHubSection({required this.viewModel});
+
+  final ProfileViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final hub = viewModel.currentHub;
+    final children = <Widget>[];
+
+    if (hub != null) {
+      children.add(_CurrentHubTile(hub: hub));
+    }
+
+    if (viewModel.loadErrorMessage != null) {
+      if (children.isNotEmpty) children.add(const SizedBox(height: 10));
+      children.add(
+        AppBanner.error(
+          key: const Key('profile-current-hub-error'),
+          message: viewModel.loadErrorMessage!,
+          actionLabel: 'Try again',
+          onAction: viewModel.retryLoad,
+          actionBusy: viewModel.isLoading,
+        ),
+      );
+    } else if (viewModel.isLoading) {
+      if (children.isNotEmpty) children.add(const SizedBox(height: 10));
+      children.add(const _CurrentHubLoading());
+    } else if (hub == null) {
+      children.add(const _CurrentHubTile(hub: null));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+}
+
+class _CurrentHubLoading extends StatelessWidget {
+  const _CurrentHubLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            const SizedBox.square(
+              key: Key('current-hub-progress'),
+              dimension: 20,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Loading your current hub…',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/deal_repository.dart';
 import '../../models/deal.dart';
+import '../shared/app_banner.dart';
 import '../shared/app_icon_container.dart';
 import '../shared/app_message_state.dart';
 import 'create_deal_screen.dart';
@@ -10,7 +11,7 @@ import 'deal_details_screen.dart';
 import 'split_board_viewmodel.dart';
 import 'widgets/deal_card.dart';
 
-class SplitBoardScreen extends StatelessWidget {
+class SplitBoardScreen extends StatefulWidget {
   const SplitBoardScreen({super.key, required this.hubId});
 
   final String hubId;
@@ -26,6 +27,19 @@ class SplitBoardScreen extends StatelessWidget {
         child: SplitBoardScreen(hubId: hubId),
       ),
     );
+  }
+
+  @override
+  State<SplitBoardScreen> createState() => _SplitBoardScreenState();
+}
+
+class _SplitBoardScreenState extends State<SplitBoardScreen> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -60,12 +74,13 @@ class SplitBoardScreen extends StatelessWidget {
 
             return RefreshIndicator(
               onRefresh: viewModel.refresh,
-              child: viewModel.hasError
+              child: viewModel.hasError && viewModel.deals.isEmpty
                   ? AppMessageState(
                       icon: Icons.cloud_off_outlined,
                       title: "Couldn't load deals",
                       message: 'Check your connection and try again.',
                       onRetry: viewModel.refresh,
+                      retryBusy: viewModel.isRefreshing,
                     )
                   : viewModel.deals.isEmpty
                   ? const AppMessageState(
@@ -74,7 +89,10 @@ class SplitBoardScreen extends StatelessWidget {
                       message:
                           'Be the first to post a bulk-buy deal for your hub.',
                     )
-                  : _DealList(viewModel: viewModel),
+                  : _DealList(
+                      viewModel: viewModel,
+                      scrollController: _scrollController,
+                    ),
             );
           },
         ),
@@ -82,7 +100,7 @@ class SplitBoardScreen extends StatelessWidget {
       floatingActionButton: Consumer<SplitBoardViewModel>(
         builder: (context, viewModel, _) => FloatingActionButton.extended(
           key: const Key('post-deal-button'),
-          onPressed: () => _postDeal(context, hubId, viewModel),
+          onPressed: () => _postDeal(context, widget.hubId, viewModel),
           icon: const Icon(Icons.add),
           label: const Text('Post a deal'),
         ),
@@ -96,31 +114,51 @@ Future<void> _postDeal(
   String hubId,
   SplitBoardViewModel viewModel,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
-
   final deal = await Navigator.of(
     context,
   ).push(CreateDealScreen.route(hubId, viewModel.hubName));
+  if (!context.mounted) return;
   if (deal == null) return;
 
   await viewModel.refresh();
-  messenger.showSnackBar(
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text('${deal.title} is now on the Split Board.')),
   );
 }
 
 class _DealList extends StatelessWidget {
-  const _DealList({required this.viewModel});
+  const _DealList({required this.viewModel, required this.scrollController});
 
   final SplitBoardViewModel viewModel;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
     final deals = viewModel.filteredDeals;
 
     return CustomScrollView(
+      key: const PageStorageKey<String>('board-scroll-view'),
+      controller: scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
+        if (viewModel.refreshErrorMessage != null) ...[
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            sliver: SliverToBoxAdapter(
+              child: _BoardContent(
+                child: AppBanner.error(
+                  key: const Key('board-refresh-error'),
+                  message: viewModel.refreshErrorMessage!,
+                  actionLabel: 'Try again',
+                  onAction: viewModel.refresh,
+                  actionBusy: viewModel.isRefreshing,
+                ),
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 12)),
+        ],
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           sliver: SliverToBoxAdapter(
@@ -148,10 +186,31 @@ class _DealList extends StatelessWidget {
                     child: InkWell(
                       key: Key('deal-card-${deal.id}'),
                       onTap: () async {
+                        final preservedOffset = scrollController.hasClients
+                            ? scrollController.offset
+                            : null;
                         final updated = await Navigator.of(
                           context,
                         ).push(DealDetailsScreen.route(deal));
-                        if (updated != null) viewModel.replaceDeal(updated);
+                        if (!context.mounted) return;
+                        if (updated != null && !identical(updated, deal)) {
+                          viewModel.replaceDeal(updated);
+                        }
+                        if (preservedOffset != null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (!scrollController.hasClients) return;
+                              scrollController.jumpTo(
+                                preservedOffset
+                                    .clamp(
+                                      scrollController.position.minScrollExtent,
+                                      scrollController.position.maxScrollExtent,
+                                    )
+                                    .toDouble(),
+                              );
+                            });
+                          });
+                        }
                       },
                       borderRadius: BorderRadius.circular(16),
                       child: DealCard(deal: deal),
