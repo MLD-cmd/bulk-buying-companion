@@ -48,10 +48,7 @@ void main() {
       find.byKey(const Key('deal-total-price-field')),
       totalPrice,
     );
-    await tester.enterText(
-      find.byKey(const Key('deal-amount-field')),
-      amount,
-    );
+    await tester.enterText(find.byKey(const Key('deal-amount-field')), amount);
     if (unit != null) {
       final chip = find.byKey(Key('deal-unit-${unit.name}'));
       await tester.ensureVisible(chip);
@@ -75,6 +72,22 @@ void main() {
     await tester.tap(button);
     await tester.pumpAndSettle();
   }
+
+  testWidgets('form groups the existing draft into clear sections', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    expect(find.text('Product'), findsOneWidget);
+    expect(find.text('Split'), findsOneWidget);
+    expect(find.text('Pickup'), findsOneWidget);
+    expect(find.byKey(const Key('deal-title-field')), findsOneWidget);
+    expect(find.byKey(const Key('deal-total-price-field')), findsOneWidget);
+    expect(find.byKey(const Key('deal-pickup-location-field')), findsOneWidget);
+
+    await fillForm(tester);
+    expect(find.byKey(const Key('deal-review')), findsOneWidget);
+  });
 
   testWidgets('student publishes a deal and it lands on the hub feed', (
     tester,
@@ -133,9 +146,7 @@ void main() {
     expect(find.byKey(const Key('deal-split-surplus')), findsOneWidget);
   });
 
-  testWidgets('says nothing about a surplus on an even split', (
-    tester,
-  ) async {
+  testWidgets('says nothing about a surplus on an even split', (tester) async {
     await pumpScreen(tester, MockDealRepository());
 
     await fillForm(tester, totalPrice: '900', totalSlots: '5');
