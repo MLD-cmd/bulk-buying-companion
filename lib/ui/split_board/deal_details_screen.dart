@@ -5,8 +5,11 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/reservation_repository.dart';
 import '../../models/deal.dart';
 import '../../models/reservation.dart';
+import '../shared/app_banner.dart';
+import '../shared/deal_action_bar.dart';
 import '../shared/app_theme.dart';
 import 'deal_details_viewmodel.dart';
+import 'widgets/deal_status_badge.dart';
 
 /// Everything a student needs before committing money to a bulk buy: what it
 /// is, who is organising it, what their share costs, whether there is room
@@ -35,6 +38,10 @@ class DealDetailsScreen extends StatelessWidget {
       builder: (context, viewModel, _) {
         final theme = Theme.of(context);
         final deal = viewModel.deal;
+        final showActionBar =
+            !viewModel.isHost ||
+            viewModel.canMarkPurchased ||
+            viewModel.canCancelDeal;
 
         return PopScope(
           canPop: false,
@@ -47,177 +54,102 @@ class DealDetailsScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          deal.title,
-                          key: const Key('detail-title'),
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            height: 1.25,
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            deal.title,
+                            key: const Key('detail-title'),
+                            style: theme.textTheme.headlineSmall,
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      _StatusBadge(deal: deal),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _Pill(label: deal.category.label),
-                      const SizedBox(width: 8),
-                      _Pill(label: deal.physicalShare.totalLabel),
-                    ],
-                  ),
-                  if (deal.description != null &&
-                      deal.description!.trim().isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      deal.description!.trim(),
-                      key: const Key('detail-description'),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        height: 1.5,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-
-                  // The number that decides whether a student joins.
-                  _CostCard(deal: deal),
-                  const SizedBox(height: 20),
-
-                  _SectionLabel('Slots'),
-                  _SlotsRow(deal: deal),
-                  const SizedBox(height: 24),
-
-                  _SectionLabel('Who is in'),
-                  _Participants(
-                    key: const Key('detail-participants'),
-                    viewModel: viewModel,
-                  ),
-                  const SizedBox(height: 24),
-
-                  _SectionLabel('Organised by'),
-                  _HostRow(deal: deal),
-                  const SizedBox(height: 24),
-
-                  _SectionLabel('Pickup'),
-                  _DetailRow(
-                    icon: Icons.storefront_outlined,
-                    label: deal.pickupLocation,
-                    keyValue: const Key('detail-pickup-location'),
-                  ),
-                  const SizedBox(height: 8),
-                  _DetailRow(
-                    icon: Icons.event_outlined,
-                    label: deal.deadlineLabel,
-                    keyValue: const Key('detail-deadline'),
-                  ),
-                  const SizedBox(height: 32),
-
-                  if (viewModel.errorMessage != null) ...[
-                    _Banner(
-                      key: const Key('detail-reservation-error'),
-                      message: viewModel.errorMessage!,
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  if (viewModel.isHost) ...[
-                    Container(
-                      key: const Key('detail-host-slot-note'),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
-                        ),
-                      ),
-                      child: Text(
-                        'You are organising this buy, so one slot is yours.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    if (viewModel.canMarkPurchased) ...[
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        key: const Key('detail-mark-purchased-button'),
-                        onPressed: viewModel.isUpdating
-                            ? null
-                            : viewModel.markPurchased,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(52),
-                          backgroundColor: AppTheme.accent,
-                          foregroundColor: Colors.white,
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              DealStatusBadge(deal: deal),
+                              _Pill(label: deal.category.label),
+                              _Pill(label: deal.physicalShare.totalLabel),
+                            ],
                           ),
-                        ),
-                        child: const Text("I've bought it"),
-                      ),
-                    ],
-                    if (viewModel.canCancelDeal) ...[
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        key: const Key('detail-cancel-deal-button'),
-                        onPressed: viewModel.isUpdating
-                            ? null
-                            : () => _confirmCancel(context, viewModel),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(52),
-                          foregroundColor: theme.colorScheme.error,
-                          side: BorderSide(color: theme.colorScheme.error),
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                          if (deal.description != null &&
+                              deal.description!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              deal.description!.trim(),
+                              key: const Key('detail-description'),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          _CostCard(deal: deal),
+                          const SizedBox(height: 24),
+                          const _SectionLabel('Slots'),
+                          _SlotsRow(deal: deal),
+                          const SizedBox(height: 28),
+                          const _SectionLabel('Pickup'),
+                          _DetailRow(
+                            icon: Icons.storefront_outlined,
+                            label: deal.pickupLocation,
+                            keyValue: const Key('detail-pickup-location'),
                           ),
-                        ),
-                        child: const Text('Cancel this deal'),
+                          const SizedBox(height: 10),
+                          _DetailRow(
+                            icon: Icons.event_outlined,
+                            label: deal.deadlineLabel,
+                            keyValue: const Key('detail-deadline'),
+                          ),
+                          const SizedBox(height: 28),
+                          const _SectionLabel('Who is in'),
+                          _Participants(
+                            key: const Key('detail-participants'),
+                            viewModel: viewModel,
+                          ),
+                          const SizedBox(height: 28),
+                          const _SectionLabel('Organised by'),
+                          _HostRow(deal: deal),
+                          if (viewModel.errorMessage != null) ...[
+                            const SizedBox(height: 20),
+                            AppBanner.error(
+                              key: const Key('detail-reservation-error'),
+                              message: viewModel.errorMessage!,
+                            ),
+                          ],
+                          if (viewModel.isHost) ...[
+                            const SizedBox(height: 20),
+                            const AppBanner.notice(
+                              key: Key('detail-host-slot-note'),
+                              message:
+                                  'You are organising this buy, so one slot is yours.',
+                              icon: Icons.star_outline,
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ] else
-                    FilledButton(
-                      key: const Key('detail-reserve-button'),
-                      onPressed: viewModel.isUpdating
-                          ? null
-                          : viewModel.holdsSlot
-                          ? (viewModel.canCancel ? viewModel.cancel : null)
-                          : (viewModel.canReserve ? viewModel.reserve : null),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: Colors.white,
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      child: Text(_actionLabel(viewModel)),
                     ),
+                  ),
                 ],
               ),
             ),
+            bottomNavigationBar: showActionBar
+                ? DealActionBar(
+                    key: const Key('detail-action-bar'),
+                    child: _LifecycleActions(
+                      viewModel: viewModel,
+                      onCancelDeal: () => _confirmCancel(context, viewModel),
+                    ),
+                  )
+                : null,
           ),
         );
       },
     );
-  }
-
-  String _actionLabel(DealDetailsViewModel viewModel) {
-    if (viewModel.holdsSlot) {
-      return viewModel.deadlinePassed ? 'Slot locked in' : 'Cancel my slot';
-    }
-    if (viewModel.isFull) return 'No slots left';
-    if (viewModel.deadlinePassed) return 'Deadline passed';
-    return 'Reserve a slot';
   }
 
   /// The app never moves money. What it refuses to do is let the host cancel
@@ -270,6 +202,85 @@ class DealDetailsScreen extends StatelessWidget {
   }
 }
 
+class _LifecycleActions extends StatelessWidget {
+  const _LifecycleActions({
+    required this.viewModel,
+    required this.onCancelDeal,
+  });
+
+  final DealDetailsViewModel viewModel;
+  final VoidCallback onCancelDeal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final errorStyle = ButtonStyle(
+      foregroundColor: WidgetStatePropertyAll(theme.colorScheme.error),
+      side: WidgetStatePropertyAll(BorderSide(color: theme.colorScheme.error)),
+    );
+
+    if (viewModel.isHost) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (viewModel.canMarkPurchased)
+            FilledButton.icon(
+              key: const Key('detail-mark-purchased-button'),
+              onPressed: viewModel.isUpdating ? null : viewModel.markPurchased,
+              icon: const Icon(Icons.shopping_bag_outlined),
+              label: const Text("I've bought it"),
+            ),
+          if (viewModel.canMarkPurchased && viewModel.canCancelDeal)
+            const SizedBox(height: 8),
+          if (viewModel.canCancelDeal)
+            OutlinedButton.icon(
+              key: const Key('detail-cancel-deal-button'),
+              onPressed: viewModel.isUpdating ? null : onCancelDeal,
+              style: errorStyle,
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('Cancel this deal'),
+            ),
+        ],
+      );
+    }
+
+    if (viewModel.holdsSlot && viewModel.canCancel) {
+      return OutlinedButton.icon(
+        key: const Key('detail-reserve-button'),
+        onPressed: viewModel.isUpdating ? null : viewModel.cancel,
+        style: errorStyle,
+        icon: const Icon(Icons.remove_circle_outline),
+        label: const Text('Cancel my slot'),
+      );
+    }
+
+    return FilledButton.icon(
+      key: const Key('detail-reserve-button'),
+      onPressed: viewModel.isUpdating
+          ? null
+          : viewModel.holdsSlot
+          ? null
+          : (viewModel.canReserve ? viewModel.reserve : null),
+      icon: Icon(
+        viewModel.holdsSlot
+            ? Icons.lock_outline
+            : viewModel.canReserve
+            ? Icons.add_circle_outline
+            : Icons.block_outlined,
+      ),
+      label: Text(_participantActionLabel(viewModel)),
+    );
+  }
+
+  String _participantActionLabel(DealDetailsViewModel viewModel) {
+    if (viewModel.holdsSlot) return 'Slot locked in';
+    if (viewModel.isFull) return 'No slots left';
+    if (viewModel.deadlinePassed) return 'Deadline passed';
+    return 'Reserve a slot';
+  }
+}
+
 class _CostCard extends StatelessWidget {
   const _CostCard({required this.deal});
 
@@ -289,49 +300,44 @@ class _CostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'YOUR SHARE',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        letterSpacing: 0.8,
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final textScale = MediaQuery.textScalerOf(context).scale(1);
+              final share = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'YOUR SHARE',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      letterSpacing: 0.8,
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      formatPeso(deal.pricePerShare),
-                      key: const Key('detail-cost-per-slot'),
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    formatPeso(deal.pricePerShare),
+                    key: const Key('detail-cost-per-slot'),
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      deal.physicalShare.shareLabel,
-                      key: const Key('detail-physical-share'),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    deal.physicalShare.shareLabel,
+                    key: const Key('detail-physical-share'),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                  ),
+                ],
+              );
+              final total = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Total ${formatPeso(deal.totalPrice)}',
                     key: const Key('detail-total-price'),
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
                   ),
@@ -343,8 +349,24 @@ class _CostCard extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
-            ],
+              );
+
+              if (constraints.maxWidth < 420 || textScale > 1.3) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [share, const SizedBox(height: 14), total],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: share),
+                  const SizedBox(width: 16),
+                  total,
+                ],
+              );
+            },
           ),
           // The share rounds up, so the shares collect slightly more than the
           // item cost. Say so, rather than leaving two figures that do not
@@ -389,12 +411,20 @@ class _SlotsRow extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 8,
-            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+        Semantics(
+          key: const Key('detail-slot-progress'),
+          label: '$taken of ${deal.totalSlots} slots claimed',
+          value: '${(progress * 100).round()} percent',
+          readOnly: true,
+          child: ExcludeSemantics(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                backgroundColor: theme.colorScheme.surfaceContainerHighest,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 6),
@@ -434,46 +464,9 @@ class _Participants extends StatelessWidget {
         for (final participant in participants)
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: Row(
-              children: [
-                Icon(
-                  participant.isHost
-                      ? Icons.star_outline
-                      : Icons.person_outline,
-                  size: 16,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          participant.displayName,
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                      if (participant.isHost) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          '(organiser)',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                _PaidControl(viewModel: viewModel, participant: participant),
-                if (viewModel.isPurchased) ...[
-                  const SizedBox(width: 8),
-                  _CollectedControl(
-                    viewModel: viewModel,
-                    participant: participant,
-                  ),
-                ],
-              ],
+            child: _ParticipantRow(
+              viewModel: viewModel,
+              participant: participant,
             ),
           ),
         const SizedBox(height: 4),
@@ -486,6 +479,79 @@ class _Participants extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ParticipantRow extends StatelessWidget {
+  const _ParticipantRow({required this.viewModel, required this.participant});
+
+  final DealDetailsViewModel viewModel;
+  final Reservation participant;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final identity = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          participant.isHost ? Icons.star_outline : Icons.person_outline,
+          size: 18,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(participant.displayName, style: theme.textTheme.bodyMedium),
+              if (participant.isHost)
+                Text(
+                  '(organiser)',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final controls = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _PaidControl(viewModel: viewModel, participant: participant),
+        if (viewModel.isPurchased)
+          _CollectedControl(viewModel: viewModel, participant: participant),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 520 || textScale > 1.3) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              identity,
+              const SizedBox(height: 6),
+              Align(alignment: Alignment.centerRight, child: controls),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(child: identity),
+            const SizedBox(width: 12),
+            controls,
+          ],
+        );
+      },
     );
   }
 }
@@ -526,10 +592,7 @@ class _PaidControl extends StatelessWidget {
 
 /// The host taps to mark a pickup; everyone else just reads it.
 class _CollectedControl extends StatelessWidget {
-  const _CollectedControl({
-    required this.viewModel,
-    required this.participant,
-  });
+  const _CollectedControl({required this.viewModel, required this.participant});
 
   final DealDetailsViewModel viewModel;
   final Reservation participant;
@@ -572,21 +635,26 @@ class _StateChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: on
-            ? const Color(0xFFDCEFE3)
+            ? theme.brightness == Brightness.light
+                  ? AppTheme.successContainer
+                  : theme.colorScheme.primaryContainer
             : theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
           color: on
-              ? const Color(0xFF7FB99A)
+              ? theme.brightness == Brightness.light
+                    ? AppTheme.success.withValues(alpha: 0.35)
+                    : theme.colorScheme.primary.withValues(alpha: 0.35)
               : theme.colorScheme.outlineVariant,
         ),
       ),
       child: Text(
         label,
         style: theme.textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w700,
           color: on
-              ? const Color(0xFF173E28)
+              ? theme.brightness == Brightness.light
+                    ? AppTheme.onSuccessContainer
+                    : theme.colorScheme.onPrimaryContainer
               : theme.colorScheme.onSurfaceVariant,
         ),
       ),
@@ -723,96 +791,6 @@ class _Pill extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: theme.colorScheme.onSurfaceVariant,
         ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.deal});
-
-  final Deal deal;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final (background, foreground) = deal.isFillingFast
-        ? (const Color(0xFFFDECC8), const Color(0xFF6B4A00))
-        : switch (deal.status) {
-            DealStatus.open => (
-              const Color(0xFFDCEFE3),
-              const Color(0xFF173E28),
-            ),
-            // Red, not the amber above: a full deal is one you cannot join, and
-            // it sits a tap away from the filling-fast card that brought you
-            // here. Cancelled shares the red, but the labels differ and the
-            // board hides cancelled deals by default, so the two never meet.
-            DealStatus.full || DealStatus.cancelled => (
-              const Color(0xFFF3D6D6),
-              const Color(0xFF6B1D1D),
-            ),
-            // The two states where the deal is waiting on the host.
-            DealStatus.readyToPurchase || DealStatus.readyForPickup => (
-              const Color(0xFFDDE7F7),
-              const Color(0xFF1B3A66),
-            ),
-            DealStatus.completed => (
-              const Color(0xFFE6E6E1),
-              const Color(0xFF3D3D38),
-            ),
-          };
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        deal.statusLabel,
-        style: theme.textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w800,
-          color: foreground,
-        ),
-      ),
-    );
-  }
-}
-
-class _Banner extends StatelessWidget {
-  const _Banner({super.key, required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 18,
-            color: theme.colorScheme.onErrorContainer,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onErrorContainer,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

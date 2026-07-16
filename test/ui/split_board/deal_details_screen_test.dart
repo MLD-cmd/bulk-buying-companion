@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsFlag;
+
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
@@ -107,6 +109,12 @@ void main() {
     // Available slots.
     expect(find.text('3 of 5 slots open'), findsOneWidget);
     expect(find.text('2 of 5 already claimed'), findsOneWidget);
+    expect(find.byKey(const Key('detail-action-bar')), findsOneWidget);
+    final slotProgress = tester.getSemantics(
+      find.byKey(const Key('detail-slot-progress')),
+    );
+    expect(slotProgress.label, contains('2 of 5 slots claimed'));
+    expect(slotProgress.hasFlag(SemanticsFlag.isReadOnly), isTrue);
 
     // Pickup details.
     expect(find.text('USJR Main Gate'), findsOneWidget);
@@ -114,6 +122,39 @@ void main() {
 
     // Reservation button.
     expect(find.text('Reserve a slot'), findsOneWidget);
+  });
+
+  testWidgets('details reflow at narrow width with enlarged text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider(
+          create: (_) => DealDetailsViewModel(
+            deal: _reservableDeal,
+            currentUserId: 'user-2',
+            reservationRepository: MockReservationRepository(
+              deal: _reservableDeal,
+              currentUserId: 'user-2',
+            ),
+          ),
+          child: const DealDetailsScreen(),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.ensureVisible(find.byKey(const Key('detail-participants')));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('shows the whole buy on the pill, not a meaningless unit count', (
@@ -184,6 +225,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Cancel my slot'), findsOneWidget);
+    expect(
+      tester.widget<OutlinedButton>(
+        find.byKey(const Key('detail-reserve-button')),
+      ),
+      isA<OutlinedButton>(),
+    );
   });
 
   testWidgets('the host is shown holding a slot they cannot give up', (
@@ -388,7 +435,7 @@ final _deal = Deal(
   availableSlots: 3,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
-  closesAt: DateTime(2026, 7, 16),
+  closesAt: DateTime(2026, 7, 16, 23, 59),
 );
 
 const _bulk = Deal(
