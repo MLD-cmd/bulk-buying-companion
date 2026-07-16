@@ -28,6 +28,7 @@ class CreateHubViewModel extends ChangeNotifier {
   String? _locationError;
   String? _errorMessage;
   Coordinates? _capturedLocation;
+  bool _disposed = false;
 
   List<Hub> get existingHubs => _existingHubs;
   bool get isLocating => _isLocating;
@@ -40,13 +41,16 @@ class CreateHubViewModel extends ChangeNotifier {
   Coordinates? get capturedLocation => _capturedLocation;
 
   Future<void> _loadExistingHubs() async {
+    late final List<Hub> hubs;
     try {
-      _existingHubs = await _hubRepository.getHubs();
+      hubs = await _hubRepository.getHubs();
     } catch (_) {
       // A failed directory load only weakens duplicate detection; it must not
       // block registration. The database's primary key is the real guard.
-      _existingHubs = const [];
+      hubs = const [];
     }
+    if (_disposed) return;
+    _existingHubs = hubs;
     notifyListeners();
   }
 
@@ -109,28 +113,34 @@ class CreateHubViewModel extends ChangeNotifier {
   }
 
   Future<void> useMyLocation() async {
-    if (_isLocating) return;
+    if (_disposed || _isLocating) return;
     _isLocating = true;
     _locationError = null;
     notifyListeners();
 
     try {
-      _capturedLocation = await _locationService.getCurrentPosition();
+      final location = await _locationService.getCurrentPosition();
+      if (_disposed) return;
+      _capturedLocation = location;
     } on LocationFailure catch (error) {
+      if (_disposed) return;
       _locationError = error.message;
     } catch (_) {
+      if (_disposed) return;
       _locationError =
           'Could not read your location. Enter the coordinates below instead.';
     } finally {
-      _isLocating = false;
-      notifyListeners();
+      if (!_disposed) {
+        _isLocating = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Returns the registered hub, or null when the draft was rejected. The
   /// reason is exposed on [errorMessage].
   Future<Hub?> submit(HubDraft draft) async {
-    if (_isSubmitting) return null;
+    if (_disposed || _isSubmitting) return null;
 
     final duplicate = duplicateErrorFor(draft);
     if (duplicate != null) {
@@ -144,16 +154,28 @@ class CreateHubViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      return await _hubRepository.createHub(draft);
+      final hub = await _hubRepository.createHub(draft);
+      return _disposed ? null : hub;
     } on HubFailure catch (error) {
+      if (_disposed) return null;
       _errorMessage = error.message;
       return null;
     } catch (_) {
+      if (_disposed) return null;
       _errorMessage = 'Could not register the hub. Please try again.';
       return null;
     } finally {
-      _isSubmitting = false;
-      notifyListeners();
+      if (!_disposed) {
+        _isSubmitting = false;
+        notifyListeners();
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    super.dispose();
   }
 }

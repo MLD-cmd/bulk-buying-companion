@@ -5,6 +5,7 @@ import 'package:bulk_buying_companion/data/services/location_service.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/models/hub.dart';
+import 'package:bulk_buying_companion/ui/hub/create_hub_screen.dart';
 import 'package:bulk_buying_companion/ui/hub/join_hub_screen.dart';
 import 'package:bulk_buying_companion/ui/hub/join_hub_viewmodel.dart';
 import 'package:bulk_buying_companion/ui/hub/widgets/hub_card.dart';
@@ -271,6 +272,69 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Register Hub stacks coordinates and protects details at 320 pixels with 200 percent text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            Provider<HubRepository>.value(value: _ResponsiveHubRepository()),
+            Provider<LocationService>.value(
+              value: const _ResponsiveLocationStub(),
+            ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () =>
+                      Navigator.of(context).push(CreateHubScreen.route()),
+                  child: const Text('open registration'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open registration'));
+      await tester.pumpAndSettle();
+
+      final latitude = find.byKey(const Key('hub-latitude-field'));
+      final longitude = find.byKey(const Key('hub-longitude-field'));
+      await tester.ensureVisible(latitude);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(longitude).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(latitude).dy),
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.enterText(
+        find.byKey(const Key('hub-name-field')),
+        'New campus hub',
+      );
+      FocusScope.of(tester.element(find.byType(CreateHubScreen))).unfocus();
+      await tester.pump();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard these details?'), findsOneWidget);
+      expect(find.text('Keep editing'), findsOneWidget);
+      expect(find.text('Discard'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<JoinHubViewModel> _pumpCurrentHubScreen(

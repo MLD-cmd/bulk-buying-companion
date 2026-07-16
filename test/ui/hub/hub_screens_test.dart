@@ -473,6 +473,593 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('untouched registration Back leaves without confirmation', (
+    tester,
+  ) async {
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: const _LocationStub(),
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Register a hub'), findsNothing);
+    expect(find.text('Discard these details?'), findsNothing);
+  });
+
+  testWidgets('Keep editing preserves all changed registration details', (
+    tester,
+  ) async {
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: const _LocationStub(),
+    );
+    await tester.enterText(
+      find.byKey(const Key('hub-name-field')),
+      'Sanciangko Apartments',
+    );
+    await tester.tap(find.text('Area hub'));
+    await tester.enterText(
+      find.byKey(const Key('hub-latitude-field')),
+      '10.300001',
+    );
+    await tester.enterText(
+      find.byKey(const Key('hub-longitude-field')),
+      '123.900001',
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard these details?'), findsOneWidget);
+    expect(
+      find.text('Your unpublished hub details will be lost if you leave now.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    expect(
+      _hubTextField(tester, const Key('hub-name-field')).controller?.text,
+      'Sanciangko Apartments',
+    );
+    expect(
+      _hubTextField(tester, const Key('hub-latitude-field')).controller?.text,
+      '10.300001',
+    );
+    expect(
+      _hubTextField(tester, const Key('hub-longitude-field')).controller?.text,
+      '123.900001',
+    );
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('hub-type-areaHub')))
+          .properties
+          .selected,
+      isTrue,
+    );
+  });
+
+  testWidgets('name, type, and coordinate changes each protect registration', (
+    tester,
+  ) async {
+    final edits = <Future<void> Function()>[
+      () =>
+          tester.enterText(find.byKey(const Key('hub-name-field')), 'New hub'),
+      () => tester.tap(find.text('Area hub')),
+      () =>
+          tester.enterText(find.byKey(const Key('hub-latitude-field')), '10.3'),
+      () => tester.enterText(
+        find.byKey(const Key('hub-longitude-field')),
+        '123.9',
+      ),
+    ];
+
+    for (final edit in edits) {
+      await _pumpCreateHubRoute(
+        tester,
+        repository: _CreateHubRepository(),
+        locationService: const _LocationStub(),
+      );
+      await edit();
+      await tester.pump();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Discard these details?'), findsOneWidget);
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('successful location capture protects populated coordinates', (
+    tester,
+  ) async {
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: const _LocationStub(),
+    );
+
+    await tester.tap(find.byKey(const Key('hub-use-location-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      _hubTextField(tester, const Key('hub-latitude-field')).controller?.text,
+      '10.295400',
+    );
+    expect(
+      _hubTextField(tester, const Key('hub-longitude-field')).controller?.text,
+      '123.896900',
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets('Discard leaves registration once and dialogs do not stack', (
+    tester,
+  ) async {
+    final observer = _HubRouteObserver();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: const _LocationStub(),
+      observer: observer,
+    );
+    await tester.enterText(find.byKey(const Key('hub-name-field')), 'New hub');
+
+    final guard = tester.widget<PopScope<Hub>>(find.byType(PopScope<Hub>));
+    guard.onPopInvokedWithResult?.call(false, null);
+    guard.onPopInvokedWithResult?.call(false, null);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog, skipOffstage: false), findsOneWidget);
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Register a hub'), findsNothing);
+    expect(observer.hubRoutePops, 1);
+  });
+
+  testWidgets(
+    'invalid untouched submit focuses first error without latching dirty',
+    (tester) async {
+      await _pumpCreateHubRoute(
+        tester,
+        repository: _CreateHubRepository(),
+        locationService: const _LocationStub(),
+      );
+
+      final fields = <Key>[
+        const Key('hub-name-field'),
+        const Key('hub-latitude-field'),
+        const Key('hub-longitude-field'),
+      ];
+      final actions = <TextInputAction>[
+        TextInputAction.next,
+        TextInputAction.next,
+        TextInputAction.done,
+      ];
+      for (var index = 0; index < fields.length; index++) {
+        expect(
+          _hubTextField(tester, fields[index]).textInputAction,
+          actions[index],
+        );
+      }
+
+      await tester.tap(find.byKey(fields.first));
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      expect(_hubTextField(tester, fields[1]).focusNode?.hasFocus, isTrue);
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      expect(_hubTextField(tester, fields[2]).focusNode?.hasFocus, isTrue);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(_hubTextField(tester, fields[2]).focusNode?.hasFocus, isFalse);
+
+      await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+      await tester.tap(find.byKey(const Key('hub-submit-button')));
+      await tester.pumpAndSettle();
+      expect(_hubTextField(tester, fields.first).focusNode?.hasFocus, isTrue);
+      FocusScope.of(tester.element(find.byType(CreateHubScreen))).unfocus();
+      await tester.pump();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Register a hub'), findsNothing);
+      expect(find.text('Discard these details?'), findsNothing);
+    },
+  );
+
+  testWidgets('fully reverted registration details leave without a guard', (
+    tester,
+  ) async {
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: const _LocationStub(),
+    );
+    await tester.enterText(
+      find.byKey(const Key('hub-name-field')),
+      'Temporary hub',
+    );
+    await tester.enterText(find.byKey(const Key('hub-latitude-field')), '10.3');
+    await tester.enterText(
+      find.byKey(const Key('hub-longitude-field')),
+      '123.9',
+    );
+    final areaType = find.byKey(const Key('hub-type-areaHub'));
+    await tester.ensureVisible(areaType);
+    await tester.tap(areaType);
+    await tester.pump();
+
+    await tester.enterText(find.byKey(const Key('hub-name-field')), '');
+    await tester.enterText(find.byKey(const Key('hub-latitude-field')), '');
+    await tester.enterText(find.byKey(const Key('hub-longitude-field')), '');
+    final dormitoryType = find.byKey(const Key('hub-type-dormitory'));
+    await tester.ensureVisible(dormitoryType);
+    await tester.tap(dormitoryType);
+    FocusScope.of(tester.element(find.byType(CreateHubScreen))).unfocus();
+    await tester.pump();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Register a hub'), findsNothing);
+    expect(find.text('Discard these details?'), findsNothing);
+  });
+
+  testWidgets('registration failure keeps changed details protected', (
+    tester,
+  ) async {
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(
+        failure: const HubFailure('Could not register this hub.'),
+      ),
+      locationService: const _LocationStub(),
+    );
+    await _fillCreateHubForm(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not register this hub.'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets('successful registration returns its typed Hub without a guard', (
+    tester,
+  ) async {
+    late Future<Hub?> routeResult;
+    final repository = _CreateHubRepository();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: const _LocationStub(),
+      onRoutePushed: (result) => routeResult = result,
+    );
+    await _fillCreateHubForm(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+
+    final result = await routeResult;
+    expect(result?.name, 'Sanciangko Apartments');
+    expect(find.text('Register a hub'), findsNothing);
+    expect(find.text('Discard these details?'), findsNothing);
+  });
+
+  testWidgets('Back and stale actions cannot interrupt location capture', (
+    tester,
+  ) async {
+    final locationService = _DelayedCreateLocationService();
+    final repository = _CreateHubRepository();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: locationService,
+    );
+    final staleLocation = tester
+        .widget<OutlinedButton>(
+          find.byKey(const Key('hub-use-location-button')),
+        )
+        .onPressed!;
+    final staleSubmit = tester
+        .widget<FilledButton>(find.byKey(const Key('hub-submit-button')))
+        .onPressed!;
+    final staleNameChange = _hubTextField(
+      tester,
+      const Key('hub-name-field'),
+    ).onChanged!;
+    final staleType = tester
+        .widget<InkWell>(
+          find.descendant(
+            of: find.byKey(const Key('hub-type-areaHub')),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .onTap!;
+
+    staleLocation();
+    await tester.pump();
+    _expectCreateHubControlsEnabled(tester, false);
+    staleLocation();
+    staleSubmit();
+    staleNameChange('Stale name');
+    staleType();
+    await tester.pageBack();
+    await tester.pump();
+
+    expect(locationService.calls, 1);
+    expect(repository.createCalls, 0);
+    expect(find.text('Register a hub'), findsOneWidget);
+    expect(find.text('Discard these details?'), findsNothing);
+    expect(
+      _hubTextField(tester, const Key('hub-name-field')).controller?.text,
+      isEmpty,
+    );
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('hub-type-dormitory')))
+          .properties
+          .selected,
+      isTrue,
+    );
+
+    locationService.complete(
+      const Coordinates(latitude: 10.31, longitude: 123.91),
+    );
+    await tester.pumpAndSettle();
+    _expectCreateHubControlsEnabled(tester, true);
+    expect(
+      _hubTextField(tester, const Key('hub-latitude-field')).controller?.text,
+      '10.310000',
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets('location failure unlocks controls without stale changes', (
+    tester,
+  ) async {
+    final locationService = _DelayedCreateLocationService();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: locationService,
+    );
+    final staleNameChange = _hubTextField(
+      tester,
+      const Key('hub-name-field'),
+    ).onChanged!;
+    final staleType = tester
+        .widget<InkWell>(
+          find.descendant(
+            of: find.byKey(const Key('hub-type-areaHub')),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .onTap!;
+
+    await tester.tap(find.byKey(const Key('hub-use-location-button')));
+    await tester.pump();
+    _expectCreateHubControlsEnabled(tester, false);
+    staleNameChange('Stale name');
+    staleType();
+
+    locationService.fail(const LocationFailure('Location permission denied.'));
+    await tester.pumpAndSettle();
+
+    _expectCreateHubControlsEnabled(tester, true);
+    expect(find.text('Location permission denied.'), findsOneWidget);
+    expect(
+      _hubTextField(tester, const Key('hub-name-field')).controller?.text,
+      isEmpty,
+    );
+    expect(
+      tester
+          .widget<Semantics>(find.byKey(const Key('hub-type-dormitory')))
+          .properties
+          .selected,
+      isTrue,
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Register a hub'), findsNothing);
+    expect(find.text('Discard these details?'), findsNothing);
+  });
+
+  testWidgets('pending registration locks fields and cannot be discarded', (
+    tester,
+  ) async {
+    late Future<Hub?> routeResult;
+    final repository = _DelayedCreateHubRepository();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: const _LocationStub(),
+      onRoutePushed: (result) => routeResult = result,
+    );
+    await _fillCreateHubForm(tester);
+    final areaType = find.byKey(const Key('hub-type-areaHub'));
+    await tester.ensureVisible(areaType);
+    await tester.tap(areaType);
+    await tester.pump();
+    final staleSubmit = tester
+        .widget<FilledButton>(find.byKey(const Key('hub-submit-button')))
+        .onPressed!;
+    final staleType = tester
+        .widget<InkWell>(
+          find.ancestor(
+            of: find.text('Dormitory'),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .onTap!;
+
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pump();
+
+    expect(repository.createCalls, 1);
+    expect(repository.pendingDraft?.type, HubType.areaHub);
+    expect(_hubTextField(tester, const Key('hub-name-field')).enabled, isFalse);
+    expect(
+      _hubTextField(tester, const Key('hub-latitude-field')).enabled,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(const Key('hub-use-location-button')),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    staleType();
+    staleSubmit();
+    await tester.pageBack();
+    await tester.pump();
+    expect(repository.createCalls, 1);
+    expect(find.text('Register a hub'), findsOneWidget);
+    expect(find.text('Discard these details?'), findsNothing);
+
+    final created = repository.complete();
+    await tester.pumpAndSettle();
+    expect(await routeResult, same(created));
+    expect(repository.pendingDraft?.type, HubType.areaHub);
+    expect(find.text('Register a hub'), findsNothing);
+  });
+
+  testWidgets('delayed registration failure unlocks only after completion', (
+    tester,
+  ) async {
+    final repository = _DelayedCreateHubRepository();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: const _LocationStub(),
+    );
+    await _fillCreateHubForm(tester);
+
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pump();
+    await tester.pageBack();
+    await tester.pump();
+
+    expect(find.text('Register a hub'), findsOneWidget);
+    expect(find.text('Discard these details?'), findsNothing);
+    expect(_hubTextField(tester, const Key('hub-name-field')).enabled, isFalse);
+
+    repository.fail(const HubFailure('Could not register this hub.'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not register this hub.'), findsOneWidget);
+    expect(_hubTextField(tester, const Key('hub-name-field')).enabled, isTrue);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets('disposing an open registration guard has no stale callback', (
+    tester,
+  ) async {
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: const _LocationStub(),
+    );
+    await tester.enterText(
+      find.byKey(const Key('hub-name-field')),
+      'New campus hub',
+    );
+    FocusScope.of(tester.element(find.byType(CreateHubScreen))).unfocus();
+    await tester.pump();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('immediate Back safely disposes a delayed directory load', (
+    tester,
+  ) async {
+    final repository = _DelayedDirectoryCreateHubRepository();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: const _LocationStub(),
+    );
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Register a hub'), findsNothing);
+
+    repository.completeDirectory();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ancestor teardown safely disposes delayed location capture', (
+    tester,
+  ) async {
+    final locationService = _DelayedCreateLocationService();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _CreateHubRepository(),
+      locationService: locationService,
+    );
+    await tester.tap(find.byKey(const Key('hub-use-location-button')));
+    await tester.pump();
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    locationService.complete(
+      const Coordinates(latitude: 10.31, longitude: 123.91),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ancestor teardown safely disposes delayed registration', (
+    tester,
+  ) async {
+    final repository = _DelayedCreateHubRepository();
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: const _LocationStub(),
+    );
+    await _fillCreateHubForm(tester);
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pump();
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    repository.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('hub discovery keeps a readable content width on wide screens', (
     tester,
   ) async {
@@ -518,6 +1105,221 @@ class _LocationStub implements LocationService {
   @override
   Future<Coordinates> getCurrentPosition() async {
     return const Coordinates(latitude: 10.2954, longitude: 123.8969);
+  }
+}
+
+TextField _hubTextField(WidgetTester tester, Key key) =>
+    tester.widget<TextField>(
+      find.descendant(of: find.byKey(key), matching: find.byType(TextField)),
+    );
+
+void _expectCreateHubControlsEnabled(WidgetTester tester, bool enabled) {
+  for (final key in const [
+    Key('hub-name-field'),
+    Key('hub-latitude-field'),
+    Key('hub-longitude-field'),
+  ]) {
+    expect(_hubTextField(tester, key).enabled, enabled);
+  }
+  for (final key in const [
+    Key('hub-type-dormitory'),
+    Key('hub-type-areaHub'),
+  ]) {
+    expect(
+      tester
+          .widget<InkWell>(
+            find.descendant(
+              of: find.byKey(key),
+              matching: find.byType(InkWell),
+            ),
+          )
+          .onTap,
+      enabled ? isNotNull : isNull,
+    );
+  }
+  expect(
+    tester
+        .widget<OutlinedButton>(
+          find.byKey(const Key('hub-use-location-button')),
+        )
+        .onPressed,
+    enabled ? isNotNull : isNull,
+  );
+  expect(
+    tester
+        .widget<FilledButton>(find.byKey(const Key('hub-submit-button')))
+        .onPressed,
+    enabled ? isNotNull : isNull,
+  );
+}
+
+Future<void> _fillCreateHubForm(WidgetTester tester) async {
+  await tester.enterText(
+    find.byKey(const Key('hub-name-field')),
+    'Sanciangko Apartments',
+  );
+  await tester.enterText(
+    find.byKey(const Key('hub-latitude-field')),
+    '10.4000',
+  );
+  await tester.enterText(
+    find.byKey(const Key('hub-longitude-field')),
+    '124.0000',
+  );
+  await tester.pump();
+}
+
+Future<void> _pumpCreateHubRoute(
+  WidgetTester tester, {
+  required HubRepository repository,
+  required LocationService locationService,
+  NavigatorObserver? observer,
+  ValueChanged<Future<Hub?>>? onRoutePushed,
+}) async {
+  await tester.pumpWidget(
+    MultiProvider(
+      providers: [
+        Provider<HubRepository>.value(value: repository),
+        Provider<LocationService>.value(value: locationService),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        navigatorObservers: observer == null ? const [] : [observer],
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () {
+                final result = Navigator.of(
+                  context,
+                ).push(CreateHubScreen.route());
+                onRoutePushed?.call(result);
+              },
+              child: const Text('open registration'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open registration'));
+  await tester.pumpAndSettle();
+}
+
+class _CreateHubRepository implements HubRepository {
+  _CreateHubRepository({this.failure});
+
+  final HubFailure? failure;
+  int createCalls = 0;
+
+  @override
+  Future<List<Hub>> getHubs() async => const [];
+
+  @override
+  Future<Hub> createHub(HubDraft draft) async {
+    createCalls += 1;
+    final error = failure;
+    if (error != null) throw error;
+    return _hubFromDraft(draft);
+  }
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
+
+class _DelayedDirectoryCreateHubRepository implements HubRepository {
+  final _directoryCompleter = Completer<List<Hub>>();
+
+  void completeDirectory() => _directoryCompleter.complete(const []);
+
+  @override
+  Future<List<Hub>> getHubs() => _directoryCompleter.future;
+
+  @override
+  Future<Hub> createHub(HubDraft draft) async => _hubFromDraft(draft);
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
+
+class _DelayedCreateHubRepository implements HubRepository {
+  final _completer = Completer<Hub>();
+  int createCalls = 0;
+  HubDraft? pendingDraft;
+
+  Hub complete() {
+    final hub = _hubFromDraft(pendingDraft!);
+    _completer.complete(hub);
+    return hub;
+  }
+
+  void fail(Object error) => _completer.completeError(error);
+
+  @override
+  Future<List<Hub>> getHubs() async => const [];
+
+  @override
+  Future<Hub> createHub(HubDraft draft) {
+    createCalls += 1;
+    pendingDraft = draft;
+    return _completer.future;
+  }
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
+
+class _DelayedCreateLocationService implements LocationService {
+  final _completer = Completer<Coordinates>();
+  int calls = 0;
+
+  void complete(Coordinates coordinates) => _completer.complete(coordinates);
+
+  void fail(Object error) => _completer.completeError(error);
+
+  @override
+  Future<Coordinates> getCurrentPosition() {
+    calls += 1;
+    return _completer.future;
+  }
+}
+
+Hub _hubFromDraft(HubDraft draft) => Hub(
+  id: hubSlug(draft.name),
+  name: draft.name.trim(),
+  type: draft.type,
+  memberCount: 0,
+  distanceLabel: '',
+  latitude: draft.latitude,
+  longitude: draft.longitude,
+);
+
+class _HubRouteObserver extends NavigatorObserver {
+  int hubRoutePops = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route.settings.name == null && route is MaterialPageRoute<Hub>) {
+      hubRoutePops += 1;
+    }
+    super.didPop(route, previousRoute);
   }
 }
 
