@@ -76,6 +76,44 @@ void main() {
     expect(find.byKey(const Key('hub-longitude-field')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('hub discovery keeps a readable content width on wide screens', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final authRepository = MockAuthRepository();
+    await authRepository.signIn(
+      email: 'student@usjr.edu.ph',
+      password: 'Student123',
+    );
+    final viewModel = JoinHubViewModel(
+      authRepository: authRepository,
+      hubRepository: MockHubRepository(),
+      locationService: const _LocationStub(),
+    );
+    addTearDown(viewModel.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: viewModel,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const JoinHubScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSize(find.byKey(const Key('hub-search-field'))).width,
+      lessThanOrEqualTo(720),
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _LocationStub implements LocationService {

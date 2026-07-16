@@ -78,6 +78,62 @@ void main() {
     expect(find.text('Sort by'), findsOneWidget);
   });
 
+  testWidgets('board keeps a readable content width on wide screens', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository(const [
+        _StubDeal(id: 'rice', title: 'Rice Sack'),
+      ]),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: viewModel,
+        child: const MaterialApp(home: SplitBoardScreen(hubId: 'colon')),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.getSize(find.byKey(const Key('board-search-field'))).width,
+      lessThanOrEqualTo(760),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('board uses a custom lazy scroll feed for deal rows', (
+    tester,
+  ) async {
+    final deals = List<Deal>.generate(
+      40,
+      (index) => _StubDeal(id: 'deal-$index', title: 'Deal $index'),
+    );
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository(deals),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: viewModel,
+        child: const MaterialApp(home: SplitBoardScreen(hubId: 'colon')),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(find.byKey(const Key('deal-card-deal-39')), findsNothing);
+  });
+
   testWidgets('tapping a deal opens its details', (tester) async {
     final viewModel = SplitBoardViewModel(
       dealRepository: _FakeDealRepository(const [

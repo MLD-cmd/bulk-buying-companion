@@ -118,29 +118,66 @@ class _DealList extends StatelessWidget {
   Widget build(BuildContext context) {
     final deals = viewModel.filteredDeals;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-      children: [
-        _DealFilterBar(viewModel: viewModel),
-        const SizedBox(height: 18),
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+          sliver: SliverToBoxAdapter(
+            child: _BoardContent(child: _DealFilterBar(viewModel: viewModel)),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 18)),
         if (deals.isEmpty)
-          const _NoMatchingDealsState()
-        else
-          for (final deal in deals) ...[
-            InkWell(
-              key: Key('deal-card-${deal.id}'),
-              onTap: () async {
-                final updated = await Navigator.of(
-                  context,
-                ).push(DealDetailsScreen.route(deal));
-                if (updated != null) viewModel.replaceDeal(updated);
-              },
-              borderRadius: BorderRadius.circular(16),
-              child: DealCard(deal: deal),
+          const SliverPadding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 100),
+            sliver: SliverToBoxAdapter(
+              child: _BoardContent(child: _NoMatchingDealsState()),
             ),
-            const SizedBox(height: 10),
-          ],
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+            sliver: SliverList.builder(
+              itemCount: deals.length,
+              itemBuilder: (context, index) {
+                final deal = deals[index];
+                return _BoardContent(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: InkWell(
+                      key: Key('deal-card-${deal.id}'),
+                      onTap: () async {
+                        final updated = await Navigator.of(
+                          context,
+                        ).push(DealDetailsScreen.route(deal));
+                        if (updated != null) viewModel.replaceDeal(updated);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: DealCard(deal: deal),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _BoardContent extends StatelessWidget {
+  const _BoardContent({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: child,
+      ),
     );
   }
 }

@@ -44,4 +44,33 @@ void main() {
     expect(find.text('Notifications'), findsNothing);
     expect(find.text('Verified student'), findsNothing);
   });
+
+  testWidgets('profile no-hub state does not repeat discovery navigation', (
+    tester,
+  ) async {
+    final authRepository = MockAuthRepository();
+    await authRepository.signIn(
+      email: 'student@usjr.edu.ph',
+      password: 'Student123',
+    );
+    final viewModel = ProfileViewModel(
+      authRepository: authRepository,
+      hubRepository: MockHubRepository(),
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: viewModel,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const ProfileScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("You haven't joined a hub yet."), findsOneWidget);
+    expect(find.text('Find a hub'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }

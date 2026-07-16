@@ -10,6 +10,24 @@ import 'create_hub_screen.dart';
 import 'join_hub_viewmodel.dart';
 import 'widgets/hub_card.dart';
 
+const _hubContentMaxWidth = 720.0;
+
+class _HubContent extends StatelessWidget {
+  const _HubContent({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _hubContentMaxWidth),
+        child: child,
+      ),
+    );
+  }
+}
+
 class JoinHubScreen extends StatelessWidget {
   const JoinHubScreen({super.key});
 
@@ -54,33 +72,39 @@ class JoinHubScreen extends StatelessWidget {
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
-                  child: _SearchField(
-                    query: viewModel.searchQuery,
-                    onChanged: viewModel.setSearchQuery,
+                  child: _HubContent(
+                    child: _SearchField(
+                      query: viewModel.searchQuery,
+                      onChanged: viewModel.setSearchQuery,
+                    ),
                   ),
                 ),
                 if (viewModel.canFilterByDistance)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                      child: FilterChip(
-                        key: const Key('hub-nearby-filter'),
-                        avatar: const Icon(Icons.near_me_outlined, size: 18),
-                        label: Text(
-                          'Within ${(kNearbyRadiusMeters / 1000).round()} km',
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                    child: _HubContent(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FilterChip(
+                          key: const Key('hub-nearby-filter'),
+                          avatar: const Icon(Icons.near_me_outlined, size: 18),
+                          label: Text(
+                            'Within ${(kNearbyRadiusMeters / 1000).round()} km',
+                          ),
+                          selected: viewModel.nearbyOnly,
+                          onSelected: viewModel.setNearbyOnly,
                         ),
-                        selected: viewModel.nearbyOnly,
-                        onSelected: viewModel.setNearbyOnly,
                       ),
                     ),
                   )
                 else if (viewModel.locationFailureMessage != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                    child: AppBanner.notice(
-                      message: viewModel.locationFailureMessage!,
-                      icon: Icons.location_off_outlined,
+                    child: _HubContent(
+                      child: AppBanner.notice(
+                        message: viewModel.locationFailureMessage!,
+                        icon: Icons.location_off_outlined,
+                      ),
                     ),
                   ),
                 Expanded(child: _HubList(viewModel: viewModel)),
@@ -182,81 +206,85 @@ class _CurrentHubBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.18),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: _HubContent(
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: theme.colorScheme.primary.withValues(alpha: 0.18),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  AppIconContainer(
+                    icon: Icons.home_work_outlined,
+                    backgroundColor: theme.colorScheme.surface.withValues(
+                      alpha: 0.72,
+                    ),
+                    foregroundColor: theme.colorScheme.onPrimaryContainer,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'CURRENT HUB',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                            letterSpacing: 0.7,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hubName,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  TextButton.icon(
+                    onPressed: onOpenSplitBoard,
+                    icon: const Icon(Icons.arrow_forward_outlined),
+                    label: const Text('View deals'),
+                    style: ButtonStyle(
+                      foregroundColor: WidgetStatePropertyAll(
+                        theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: onLeave,
+                    icon: const Icon(Icons.logout_outlined),
+                    label: const Text('Leave hub'),
+                    style: ButtonStyle(
+                      foregroundColor: WidgetStatePropertyAll(
+                        theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              AppIconContainer(
-                icon: Icons.home_work_outlined,
-                backgroundColor: theme.colorScheme.surface.withValues(
-                  alpha: 0.72,
-                ),
-                foregroundColor: theme.colorScheme.onPrimaryContainer,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'CURRENT HUB',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                        letterSpacing: 0.7,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      hubName,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              TextButton.icon(
-                onPressed: onOpenSplitBoard,
-                icon: const Icon(Icons.arrow_forward_outlined),
-                label: const Text('View deals'),
-                style: ButtonStyle(
-                  foregroundColor: WidgetStatePropertyAll(
-                    theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: onLeave,
-                icon: const Icon(Icons.logout_outlined),
-                label: const Text('Leave hub'),
-                style: ButtonStyle(
-                  foregroundColor: WidgetStatePropertyAll(
-                    theme.colorScheme.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -288,16 +316,18 @@ class _HubList extends StatelessWidget {
         final isPending = viewModel.pendingSwitchId == hub.id;
         final showSwitch = !isJoined && viewModel.joinedHubId != null;
 
-        return HubCard(
-          hub: hub,
-          isJoined: isJoined,
-          isPendingSwitch: isPending,
-          showSwitchAction: showSwitch,
-          isBusy: viewModel.isUpdatingMembership,
-          onJoin: () => viewModel.join(hub.id),
-          onRequestSwitch: () => viewModel.requestSwitch(hub.id),
-          onConfirmSwitch: viewModel.confirmSwitch,
-          onCancelSwitch: viewModel.cancelSwitch,
+        return _HubContent(
+          child: HubCard(
+            hub: hub,
+            isJoined: isJoined,
+            isPendingSwitch: isPending,
+            showSwitchAction: showSwitch,
+            isBusy: viewModel.isUpdatingMembership,
+            onJoin: () => viewModel.join(hub.id),
+            onRequestSwitch: () => viewModel.requestSwitch(hub.id),
+            onConfirmSwitch: viewModel.confirmSwitch,
+            onCancelSwitch: viewModel.cancelSwitch,
+          ),
         );
       },
     );

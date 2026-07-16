@@ -84,9 +84,25 @@ void main() {
     expect(find.byKey(const Key('deal-title-field')), findsOneWidget);
     expect(find.byKey(const Key('deal-total-price-field')), findsOneWidget);
     expect(find.byKey(const Key('deal-pickup-location-field')), findsOneWidget);
+    expect(
+      find.byKey(const Key('deal-product-repaint-boundary')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('deal-split-repaint-boundary')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('deal-pickup-repaint-boundary')),
+      findsOneWidget,
+    );
 
     await fillForm(tester);
     expect(find.byKey(const Key('deal-review')), findsOneWidget);
+    expect(
+      find.byKey(const Key('deal-review-repaint-boundary')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('student publishes a deal and it lands on the hub feed', (

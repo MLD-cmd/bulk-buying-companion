@@ -168,28 +168,15 @@ class _CurrentHubTile extends StatelessWidget {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  const AppIconContainer(icon: Icons.home_outlined),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      "You haven't joined a hub yet.",
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.search_outlined),
-                  label: const Text('Find a hub'),
+              const AppIconContainer(icon: Icons.home_outlined),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "You haven't joined a hub yet.",
+                  style: theme.textTheme.bodyMedium,
                 ),
               ),
             ],

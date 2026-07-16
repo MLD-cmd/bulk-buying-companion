@@ -101,186 +101,208 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        AppFormSection(
-                          title: 'Product',
-                          description: 'Tell members what the group is buying.',
-                          icon: Icons.inventory_2_outlined,
-                          children: [
-                            TextFormField(
-                              key: const Key('deal-title-field'),
-                              controller: _titleController,
-                              textCapitalization: TextCapitalization.words,
-                              textInputAction: TextInputAction.next,
-                              onChanged: (_) => setState(() {}),
-                              decoration: const InputDecoration(
-                                labelText: 'Product name',
-                                hintText: 'e.g. 25kg Rice Sack',
-                                prefixIcon: Icon(Icons.inventory_2_outlined),
+                        RepaintBoundary(
+                          key: const Key('deal-product-repaint-boundary'),
+                          child: AppFormSection(
+                            title: 'Product',
+                            description:
+                                'Tell members what the group is buying.',
+                            icon: Icons.inventory_2_outlined,
+                            children: [
+                              TextFormField(
+                                key: const Key('deal-title-field'),
+                                controller: _titleController,
+                                textCapitalization: TextCapitalization.words,
+                                textInputAction: TextInputAction.next,
+                                onChanged: (_) => setState(() {}),
+                                decoration: const InputDecoration(
+                                  labelText: 'Product name',
+                                  hintText: 'e.g. 25kg Rice Sack',
+                                  prefixIcon: Icon(Icons.inventory_2_outlined),
+                                ),
+                                validator: viewModel.validateTitle,
                               ),
-                              validator: viewModel.validateTitle,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              key: const Key('deal-description-field'),
-                              controller: _descriptionController,
-                              textCapitalization: TextCapitalization.sentences,
-                              maxLines: 3,
-                              decoration: const InputDecoration(
-                                labelText: 'Description (optional)',
-                                hintText:
-                                    'Brand, size, where you are buying it…',
-                                alignLabelWithHint: true,
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                key: const Key('deal-description-field'),
+                                controller: _descriptionController,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                maxLines: 3,
+                                decoration: const InputDecoration(
+                                  labelText: 'Description (optional)',
+                                  hintText:
+                                      'Brand, size, where you are buying it…',
+                                  alignLabelWithHint: true,
+                                ),
+                                validator: viewModel.validateDescription,
                               ),
-                              validator: viewModel.validateDescription,
-                            ),
-                            const SizedBox(height: 18),
-                            Text('Category', style: theme.textTheme.labelLarge),
-                            const SizedBox(height: 8),
-                            _CategorySelector(
-                              category: _category,
-                              onChanged: viewModel.isSubmitting
-                                  ? null
-                                  : (category) =>
-                                        setState(() => _category = category),
-                            ),
-                          ],
+                              const SizedBox(height: 18),
+                              Text(
+                                'Category',
+                                style: theme.textTheme.labelLarge,
+                              ),
+                              const SizedBox(height: 8),
+                              _CategorySelector(
+                                category: _category,
+                                onChanged: viewModel.isSubmitting
+                                    ? null
+                                    : (category) =>
+                                          setState(() => _category = category),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        AppFormSection(
-                          title: 'Split',
-                          description:
-                              'Set the total purchase and what each member receives.',
-                          icon: Icons.call_split_outlined,
-                          children: [
-                            _AdaptivePair(
-                              first: TextFormField(
-                                key: const Key('deal-total-price-field'),
-                                controller: _totalPriceController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
+                        RepaintBoundary(
+                          key: const Key('deal-split-repaint-boundary'),
+                          child: AppFormSection(
+                            title: 'Split',
+                            description:
+                                'Set the total purchase and what each member receives.',
+                            icon: Icons.call_split_outlined,
+                            children: [
+                              _AdaptivePair(
+                                first: TextFormField(
+                                  key: const Key('deal-total-price-field'),
+                                  controller: _totalPriceController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9.]'),
                                     ),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                    RegExp(r'[0-9.]'),
+                                  ],
+                                  onChanged: (_) => setState(() {}),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Total price',
+                                    hintText: '900',
+                                    prefixText: 'P ',
                                   ),
-                                ],
-                                onChanged: (_) => setState(() {}),
-                                decoration: const InputDecoration(
-                                  labelText: 'Total price',
-                                  hintText: '900',
-                                  prefixText: 'P ',
+                                  validator: viewModel.validateTotalPrice,
                                 ),
-                                validator: viewModel.validateTotalPrice,
-                              ),
-                              second: TextFormField(
-                                key: const Key('deal-amount-field'),
-                                controller: _amountController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
+                                second: TextFormField(
+                                  key: const Key('deal-amount-field'),
+                                  controller: _amountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[0-9.]'),
                                     ),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                    RegExp(r'[0-9.]'),
+                                  ],
+                                  onChanged: (_) => setState(() {}),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Total amount',
+                                    hintText: '25',
                                   ),
-                                ],
+                                  validator: (value) =>
+                                      viewModel.validateAmount(value, _unit),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text('Unit', style: theme.textTheme.labelLarge),
+                              const SizedBox(height: 8),
+                              _UnitSelector(
+                                unit: _unit,
+                                onChanged: viewModel.isSubmitting
+                                    ? null
+                                    : (unit) => setState(() => _unit = unit),
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                key: const Key('deal-total-slots-field'),
+                                controller: _totalSlotsController,
+                                keyboardType: TextInputType.number,
                                 onChanged: (_) => setState(() {}),
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteraction,
                                 decoration: const InputDecoration(
-                                  labelText: 'Total amount',
-                                  hintText: '25',
+                                  labelText: 'Slots',
+                                  hintText: 'How many students split this?',
+                                  prefixIcon: Icon(Icons.groups_outlined),
                                 ),
                                 validator: (value) =>
-                                    viewModel.validateAmount(value, _unit),
+                                    viewModel.validateTotalSlots(
+                                      value,
+                                      amount: _amountController.text,
+                                      unit: _unit,
+                                    ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text('Unit', style: theme.textTheme.labelLarge),
-                            const SizedBox(height: 8),
-                            _UnitSelector(
-                              unit: _unit,
-                              onChanged: viewModel.isSubmitting
-                                  ? null
-                                  : (unit) => setState(() => _unit = unit),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              key: const Key('deal-total-slots-field'),
-                              controller: _totalSlotsController,
-                              keyboardType: TextInputType.number,
-                              onChanged: (_) => setState(() {}),
-                              autovalidateMode:
-                                  AutovalidateMode.onUserInteraction,
-                              decoration: const InputDecoration(
-                                labelText: 'Slots',
-                                hintText: 'How many students split this?',
-                                prefixIcon: Icon(Icons.groups_outlined),
-                              ),
-                              validator: (value) =>
-                                  viewModel.validateTotalSlots(
-                                    value,
-                                    amount: _amountController.text,
-                                    unit: _unit,
-                                  ),
-                            ),
-                            _SplitPreview(split: split),
-                            _SharePreview(share: share),
-                          ],
+                              _SplitPreview(split: split),
+                              _SharePreview(share: share),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        AppFormSection(
-                          title: 'Pickup',
-                          description:
-                              'Choose where members collect and when claims close.',
-                          icon: Icons.storefront_outlined,
-                          children: [
-                            TextFormField(
-                              key: const Key('deal-pickup-location-field'),
-                              controller: _pickupLocationController,
-                              textCapitalization: TextCapitalization.words,
-                              onChanged: (_) => setState(() {}),
-                              decoration: const InputDecoration(
-                                labelText: 'Pickup location',
-                                hintText: 'e.g. USJR Main Gate',
-                                prefixIcon: Icon(Icons.place_outlined),
+                        RepaintBoundary(
+                          key: const Key('deal-pickup-repaint-boundary'),
+                          child: AppFormSection(
+                            title: 'Pickup',
+                            description:
+                                'Choose where members collect and when claims close.',
+                            icon: Icons.storefront_outlined,
+                            children: [
+                              TextFormField(
+                                key: const Key('deal-pickup-location-field'),
+                                controller: _pickupLocationController,
+                                textCapitalization: TextCapitalization.words,
+                                onChanged: (_) => setState(() {}),
+                                decoration: const InputDecoration(
+                                  labelText: 'Pickup location',
+                                  hintText: 'e.g. USJR Main Gate',
+                                  prefixIcon: Icon(Icons.place_outlined),
+                                ),
+                                validator: viewModel.validatePickupLocation,
                               ),
-                              validator: viewModel.validatePickupLocation,
-                            ),
-                            const SizedBox(height: 18),
-                            Text('Deadline', style: theme.textTheme.labelLarge),
-                            const SizedBox(height: 8),
-                            _DeadlinePicker(
-                              closesAt: _closesAt,
-                              errorText: _deadlineError,
-                              onPressed: viewModel.isSubmitting
-                                  ? null
-                                  : _pickDeadline,
-                              onCleared: _closesAt == null
-                                  ? null
-                                  : () => setState(() {
-                                      _closesAt = null;
-                                      _deadlineError = null;
-                                    }),
-                            ),
-                          ],
+                              const SizedBox(height: 18),
+                              Text(
+                                'Deadline',
+                                style: theme.textTheme.labelLarge,
+                              ),
+                              const SizedBox(height: 8),
+                              _DeadlinePicker(
+                                closesAt: _closesAt,
+                                errorText: _deadlineError,
+                                onPressed: viewModel.isSubmitting
+                                    ? null
+                                    : _pickDeadline,
+                                onCleared: _closesAt == null
+                                    ? null
+                                    : () => setState(() {
+                                        _closesAt = null;
+                                        _deadlineError = null;
+                                      }),
+                              ),
+                            ],
+                          ),
                         ),
                         if (showReview) ...[
                           const SizedBox(height: 16),
-                          AppFormSection(
-                            key: const Key('deal-review'),
-                            title: 'Review',
-                            description: 'Confirm the share before publishing.',
-                            icon: Icons.fact_check_outlined,
-                            children: [
-                              _ReviewSummary(
-                                title: _titleController.text,
-                                category: _category,
-                                split: split,
-                                share: share,
-                                pickupLocation: _pickupLocationController.text,
-                                closesAt: _closesAt,
-                              ),
-                            ],
+                          RepaintBoundary(
+                            key: const Key('deal-review-repaint-boundary'),
+                            child: AppFormSection(
+                              key: const Key('deal-review'),
+                              title: 'Review',
+                              description:
+                                  'Confirm the share before publishing.',
+                              icon: Icons.fact_check_outlined,
+                              children: [
+                                _ReviewSummary(
+                                  title: _titleController.text,
+                                  category: _category,
+                                  split: split,
+                                  share: share,
+                                  pickupLocation:
+                                      _pickupLocationController.text,
+                                  closesAt: _closesAt,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                         if (viewModel.errorMessage != null) ...[
