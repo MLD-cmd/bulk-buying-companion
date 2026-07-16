@@ -174,7 +174,7 @@ Existing domain widgets such as `HubCard` and `DealCard` remain domain-specific 
 - App bar title remains `Find your hub`.
 - Profile and Register hub remain existing destinations.
 - Search uses one field with `Search hubs, buildings, areas…` inside the field and a search icon.
-- The nearby filter remains the existing `Within 5 km` capability.
+- The nearby filter remains the existing `Within 2 km` capability.
 - Hub rows show only name, type, member count, distance, membership state, and Join/Switch action.
 - Current-hub access remains prominent without introducing dashboard content.
 
