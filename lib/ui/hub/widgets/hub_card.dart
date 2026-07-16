@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/hub.dart';
+import '../../shared/app_icon_container.dart';
 import '../../shared/app_theme.dart';
 
 class HubCard extends StatelessWidget {
@@ -21,11 +22,7 @@ class HubCard extends StatelessWidget {
   final bool isJoined;
   final bool isPendingSwitch;
   final bool showSwitchAction;
-
-  /// A join or leave is already in flight. The actions go dead so a second tap
-  /// cannot be counted against a membership row that only ever holds one.
   final bool isBusy;
-
   final VoidCallback onJoin;
   final VoidCallback onRequestSwitch;
   final VoidCallback onConfirmSwitch;
@@ -33,112 +30,90 @@ class HubCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            child: const Icon(Icons.home_work_outlined, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stackAction = constraints.maxWidth < 390 || textScale > 1.3;
+            final summary = _HubSummary(hub: hub);
+            final action = _buildAction(context);
+
+            if (stackAction) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  summary,
+                  const SizedBox(height: 14),
+                  Align(alignment: Alignment.centerRight, child: action),
+                ],
+              );
+            }
+
+            return Row(
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        hub.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    _TypeChip(type: hub.type),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    _MemberCountStat(count: hub.memberCount),
-                    const SizedBox(width: 6),
-                    Text(
-                      hub.distanceLabel,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+                Expanded(child: summary),
+                const SizedBox(width: 12),
+                action,
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildAction(context),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
 
   Widget _buildAction(BuildContext context) {
+    final theme = Theme.of(context);
+
     if (isJoined) {
-      return Chip(
-        avatar: const Icon(Icons.check, size: 16, color: AppTheme.good),
-        label: const Text('Joined'),
-        backgroundColor: AppTheme.goodBg,
-        labelStyle: const TextStyle(
-          color: AppTheme.good,
-          fontWeight: FontWeight.w700,
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: theme.brightness == Brightness.light
+              ? AppTheme.successContainer
+              : theme.colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(10),
         ),
-        side: BorderSide.none,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 18,
+              color: theme.brightness == Brightness.light
+                  ? AppTheme.success
+                  : theme.colorScheme.onPrimaryContainer,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Joined',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.brightness == Brightness.light
+                    ? AppTheme.success
+                    : theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     if (isPendingSwitch) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.end,
         children: [
-          FilledButton(
-            onPressed: isBusy ? null : onConfirmSwitch,
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: const Size(0, 36),
-            ),
-            child: const Text('Yes'),
-          ),
-          const SizedBox(width: 6),
           OutlinedButton(
             onPressed: isBusy ? null : onCancelSwitch,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              minimumSize: const Size(0, 36),
-            ),
             child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: isBusy ? null : onConfirmSwitch,
+            child: const Text('Confirm switch'),
           ),
         ],
       );
@@ -147,10 +122,6 @@ class HubCard extends StatelessWidget {
     if (showSwitchAction) {
       return OutlinedButton(
         onPressed: isBusy ? null : onRequestSwitch,
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          minimumSize: const Size(0, 36),
-        ),
         child: const Text('Switch'),
       );
     }
@@ -158,79 +129,93 @@ class HubCard extends StatelessWidget {
     return FilledButton(
       key: const Key('hub-join-button'),
       onPressed: isBusy ? null : onJoin,
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        minimumSize: const Size(0, 36),
-      ),
       child: const Text('Join'),
     );
   }
 }
 
-class _MemberCountStat extends StatelessWidget {
-  const _MemberCountStat({required this.count});
+class _HubSummary extends StatelessWidget {
+  const _HubSummary({required this.hub});
 
-  final int count;
+  final Hub hub;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final typeLabel = hub.type == HubType.dormitory ? 'Dormitory' : 'Area hub';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.people_outline,
-            size: 12,
-            color: theme.colorScheme.onSurfaceVariant,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppIconContainer(
+          icon: hub.type == HubType.dormitory
+              ? Icons.apartment_outlined
+              : Icons.location_city_outlined,
+          semanticLabel: typeLabel,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                hub.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    typeLabel,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  _Metadata(
+                    icon: Icons.people_outline,
+                    label: '${hub.memberCount} members',
+                  ),
+                  if (hub.distanceLabel.trim().isNotEmpty)
+                    _Metadata(
+                      icon: Icons.near_me_outlined,
+                      label: hub.distanceLabel,
+                    ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(width: 3),
-          Text(
-            '$count',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _TypeChip extends StatelessWidget {
-  const _TypeChip({required this.type});
+class _Metadata extends StatelessWidget {
+  const _Metadata({required this.icon, required this.label});
 
-  final HubType type;
+  final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = type == HubType.dormitory ? 'DORMITORY' : 'AREA HUB';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          letterSpacing: 0.4,
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
-      ),
+      ],
     );
   }
 }

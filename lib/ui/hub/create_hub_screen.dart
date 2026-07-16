@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 import '../../data/repositories/hub_repository.dart';
 import '../../data/services/location_service.dart';
 import '../../models/hub.dart';
-import '../shared/app_theme.dart';
+import '../shared/app_banner.dart';
+import '../shared/app_form_section.dart';
 import 'create_hub_viewmodel.dart';
 
 class CreateHubScreen extends StatefulWidget {
@@ -45,6 +46,8 @@ class _CreateHubScreenState extends State<CreateHubScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Register a hub')),
       body: SafeArea(
@@ -52,132 +55,105 @@ class _CreateHubScreenState extends State<CreateHubScreen> {
           builder: (context, viewModel, _) {
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Add a dormitory or area hub so students nearby can find '
-                      'it and split bulk buys together.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        height: 1.45,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      key: const Key('hub-name-field'),
-                      controller: _nameController,
-                      textCapitalization: TextCapitalization.words,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: 'Hub name',
-                        hintText: 'e.g. Magallanes Residence',
-                        prefixIcon: Icon(Icons.apartment_outlined),
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: viewModel.validateName,
-                    ),
-                    const SizedBox(height: 20),
-                    Text('Type', style: _labelStyle(context)),
-                    const SizedBox(height: 8),
-                    _TypeSelector(
-                      type: _type,
-                      onChanged: viewModel.isSubmitting
-                          ? null
-                          : (type) => setState(() => _type = type),
-                    ),
-                    const SizedBox(height: 24),
-                    Text('Location', style: _labelStyle(context)),
-                    const SizedBox(height: 8),
-                    _UseMyLocationButton(
-                      isLocating: viewModel.isLocating,
-                      onPressed: viewModel.isSubmitting
-                          ? null
-                          : () => _useMyLocation(viewModel),
-                    ),
-                    if (viewModel.locationError != null) ...[
-                      const SizedBox(height: 10),
-                      _Banner(
-                        message: viewModel.locationError!,
-                        icon: Icons.location_disabled_outlined,
-                        isError: false,
-                      ),
-                    ],
-                    const SizedBox(height: 14),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 640),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(
-                          child: TextFormField(
-                            key: const Key('hub-latitude-field'),
-                            controller: _latitudeController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                              signed: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Latitude',
-                              hintText: '10.2954',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: viewModel.validateLatitude,
+                        Text(
+                          'Add a dormitory or area hub so nearby students can find it and split bulk buys together.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            key: const Key('hub-longitude-field'),
-                            controller: _longitudeController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                              signed: true,
+                        const SizedBox(height: 20),
+                        AppFormSection(
+                          title: 'Hub details',
+                          description: 'Use the name students know locally.',
+                          icon: Icons.home_work_outlined,
+                          children: [
+                            TextFormField(
+                              key: const Key('hub-name-field'),
+                              controller: _nameController,
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Hub name',
+                                hintText: 'e.g. Magallanes Residence',
+                                prefixIcon: Icon(Icons.apartment_outlined),
+                              ),
+                              validator: viewModel.validateName,
                             ),
-                            decoration: const InputDecoration(
-                              labelText: 'Longitude',
-                              hintText: '123.8969',
-                              border: OutlineInputBorder(),
+                            const SizedBox(height: 18),
+                            Text('Hub type', style: theme.textTheme.labelLarge),
+                            const SizedBox(height: 8),
+                            _TypeSelector(
+                              type: _type,
+                              onChanged: viewModel.isSubmitting
+                                  ? null
+                                  : (type) => setState(() => _type = type),
                             ),
-                            validator: viewModel.validateLongitude,
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        AppFormSection(
+                          title: 'Pickup area',
+                          description:
+                              'Use your location or enter the saved coordinates.',
+                          icon: Icons.location_on_outlined,
+                          children: [
+                            _UseMyLocationButton(
+                              isLocating: viewModel.isLocating,
+                              onPressed: viewModel.isSubmitting
+                                  ? null
+                                  : () => _useMyLocation(viewModel),
+                            ),
+                            if (viewModel.locationError != null) ...[
+                              const SizedBox(height: 12),
+                              AppBanner.notice(
+                                message: viewModel.locationError!,
+                                icon: Icons.location_disabled_outlined,
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _CoordinateFields(
+                              latitudeController: _latitudeController,
+                              longitudeController: _longitudeController,
+                              validateLatitude: viewModel.validateLatitude,
+                              validateLongitude: viewModel.validateLongitude,
+                            ),
+                          ],
+                        ),
+                        if (viewModel.errorMessage != null) ...[
+                          const SizedBox(height: 16),
+                          AppBanner.error(message: viewModel.errorMessage!),
+                        ],
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          key: const Key('hub-submit-button'),
+                          onPressed: viewModel.isSubmitting
+                              ? null
+                              : () => _submit(viewModel),
+                          icon: viewModel.isSubmitting
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.4,
+                                  ),
+                                )
+                              : const Icon(Icons.add_location_alt_outlined),
+                          label: Text(
+                            viewModel.isSubmitting
+                                ? 'Registering…'
+                                : 'Register hub',
                           ),
                         ),
                       ],
                     ),
-                    if (viewModel.errorMessage != null) ...[
-                      const SizedBox(height: 16),
-                      _Banner(
-                        message: viewModel.errorMessage!,
-                        icon: Icons.error_outline,
-                        isError: true,
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      key: const Key('hub-submit-button'),
-                      onPressed: viewModel.isSubmitting
-                          ? null
-                          : () => _submit(viewModel),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
-                        backgroundColor: AppTheme.accent,
-                        foregroundColor: Colors.white,
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      child: viewModel.isSubmitting
-                          ? const SizedBox.square(
-                              dimension: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Register hub'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             );
@@ -185,12 +161,6 @@ class _CreateHubScreenState extends State<CreateHubScreen> {
         ),
       ),
     );
-  }
-
-  TextStyle? _labelStyle(BuildContext context) {
-    return Theme.of(
-      context,
-    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700);
   }
 
   Future<void> _useMyLocation(CreateHubViewModel viewModel) async {
@@ -220,6 +190,74 @@ class _CreateHubScreenState extends State<CreateHubScreen> {
   }
 }
 
+class _CoordinateFields extends StatelessWidget {
+  const _CoordinateFields({
+    required this.latitudeController,
+    required this.longitudeController,
+    required this.validateLatitude,
+    required this.validateLongitude,
+  });
+
+  final TextEditingController latitudeController;
+  final TextEditingController longitudeController;
+  final FormFieldValidator<String> validateLatitude;
+  final FormFieldValidator<String> validateLongitude;
+
+  @override
+  Widget build(BuildContext context) {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stack = constraints.maxWidth < 360 || textScale > 1.3;
+        final fields = [
+          TextFormField(
+            key: const Key('hub-latitude-field'),
+            controller: latitudeController,
+            keyboardType: const TextInputType.numberWithOptions(
+              decimal: true,
+              signed: true,
+            ),
+            decoration: const InputDecoration(
+              labelText: 'Latitude',
+              hintText: '10.2954',
+            ),
+            validator: validateLatitude,
+          ),
+          TextFormField(
+            key: const Key('hub-longitude-field'),
+            controller: longitudeController,
+            keyboardType: const TextInputType.numberWithOptions(
+              decimal: true,
+              signed: true,
+            ),
+            decoration: const InputDecoration(
+              labelText: 'Longitude',
+              hintText: '123.8969',
+            ),
+            validator: validateLongitude,
+          ),
+        ];
+
+        if (stack) {
+          return Column(
+            children: [fields.first, const SizedBox(height: 12), fields.last],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: fields.first),
+            const SizedBox(width: 12),
+            Expanded(child: fields.last),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _TypeSelector extends StatelessWidget {
   const _TypeSelector({required this.type, required this.onChanged});
 
@@ -229,12 +267,13 @@ class _TypeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
     return Container(
-      height: 52,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        color: scheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         children: HubType.values.map((item) {
@@ -245,31 +284,32 @@ class _TypeSelector extends StatelessWidget {
               selected: selected,
               button: true,
               child: InkWell(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(9),
                 onTap: onChanged == null ? null : () => onChanged!(item),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
+                  constraints: const BoxConstraints(minHeight: 44),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: selected ? scheme.surface : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: selected
-                        ? const [
-                            BoxShadow(
-                              color: Color(0x18000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
-                            ),
-                          ]
+                    borderRadius: BorderRadius.circular(9),
+                    border: selected
+                        ? Border.all(color: scheme.outlineVariant)
                         : null,
                   ),
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: selected
-                          ? scheme.onSurface
-                          : scheme.onSurfaceVariant,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
+                    ),
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: selected
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
@@ -296,62 +336,14 @@ class _UseMyLocationButton extends StatelessWidget {
     return OutlinedButton.icon(
       key: const Key('hub-use-location-button'),
       onPressed: isLocating ? null : onPressed,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(48),
-        foregroundColor: AppTheme.accent,
-        side: BorderSide(color: AppTheme.accent.withValues(alpha: 0.5)),
-        textStyle: const TextStyle(fontWeight: FontWeight.w700),
-      ),
+      style: const ButtonStyle(alignment: Alignment.center),
       icon: isLocating
           ? const SizedBox.square(
               dimension: 18,
               child: CircularProgressIndicator(strokeWidth: 2.2),
             )
-          : const Icon(Icons.my_location_outlined, size: 20),
+          : const Icon(Icons.my_location_outlined),
       label: Text(isLocating ? 'Locating…' : 'Use my current location'),
-    );
-  }
-}
-
-class _Banner extends StatelessWidget {
-  const _Banner({
-    required this.message,
-    required this.icon,
-    required this.isError,
-  });
-
-  final String message;
-  final IconData icon;
-  final bool isError;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final background = isError
-        ? scheme.errorContainer
-        : scheme.surfaceContainerHighest;
-    final foreground = isError ? scheme.onErrorContainer : scheme.onSurface;
-
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: foreground, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(message, style: TextStyle(color: foreground)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

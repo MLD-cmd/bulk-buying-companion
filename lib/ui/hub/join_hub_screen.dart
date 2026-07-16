@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../profile/profile_screen.dart';
+import '../shared/app_banner.dart';
+import '../shared/app_icon_container.dart';
+import '../shared/app_message_state.dart';
 import '../split_board/split_board_screen.dart';
 import 'create_hub_screen.dart';
 import 'join_hub_viewmodel.dart';
@@ -26,6 +29,7 @@ class JoinHubScreen extends StatelessWidget {
             tooltip: 'Profile',
             onPressed: () => Navigator.of(context).push(ProfileScreen.route()),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
@@ -49,7 +53,7 @@ class JoinHubScreen extends StatelessWidget {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
                   child: _SearchField(
                     query: viewModel.searchQuery,
                     onChanged: viewModel.setSearchQuery,
@@ -59,7 +63,7 @@ class JoinHubScreen extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                       child: FilterChip(
                         key: const Key('hub-nearby-filter'),
                         avatar: const Icon(Icons.near_me_outlined, size: 18),
@@ -72,7 +76,13 @@ class JoinHubScreen extends StatelessWidget {
                     ),
                   )
                 else if (viewModel.locationFailureMessage != null)
-                  _LocationNotice(message: viewModel.locationFailureMessage!),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                    child: AppBanner.notice(
+                      message: viewModel.locationFailureMessage!,
+                      icon: Icons.location_off_outlined,
+                    ),
+                  ),
                 Expanded(child: _HubList(viewModel: viewModel)),
               ],
             );
@@ -96,30 +106,62 @@ Future<void> _registerHub(BuildContext context) async {
   );
 }
 
-class _SearchField extends StatelessWidget {
+class _SearchField extends StatefulWidget {
   const _SearchField({required this.query, required this.onChanged});
 
   final String query;
   final ValueChanged<String> onChanged;
 
   @override
+  State<_SearchField> createState() => _SearchFieldState();
+}
+
+class _SearchFieldState extends State<_SearchField> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.query);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_controller.text != widget.query) {
+      _controller.value = TextEditingValue(
+        text: widget.query,
+        selection: TextSelection.collapsed(offset: widget.query.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return TextField(
-      onChanged: onChanged,
+      key: const Key('hub-search-field'),
+      controller: _controller,
+      onChanged: widget.onChanged,
+      textInputAction: TextInputAction.search,
       decoration: InputDecoration(
         hintText: 'Search hubs, buildings, areas…',
-        prefixIcon: const Icon(Icons.search),
-        suffixIcon: query.isEmpty
+        prefixIcon: const Icon(Icons.search_outlined),
+        suffixIcon: widget.query.isEmpty
             ? null
             : IconButton(
+                tooltip: 'Clear hub search',
                 icon: const Icon(Icons.close),
-                onPressed: () => onChanged(''),
+                onPressed: () {
+                  _controller.clear();
+                  widget.onChanged('');
+                },
               ),
-        filled: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
       ),
     );
   }
@@ -138,102 +180,77 @@ class _CurrentHubBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFDCEFE3),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'CURRENT HUB',
-                  style: TextStyle(
-                    color: Color(0xFF3E7355),
-                    fontSize: 10,
-                    letterSpacing: 0.6,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  hubName,
-                  style: const TextStyle(
-                    color: Color(0xFF173E28),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: onOpenSplitBoard,
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF173E28),
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: const Size(0, 0),
-            ),
-            child: const Text(
-              'View deals',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(width: 4),
-          TextButton(
-            onPressed: onLeave,
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF173E28),
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 0),
-            ),
-            child: const Text(
-              'Leave',
-              style: TextStyle(
-                decoration: TextDecoration.underline,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LocationNotice extends StatelessWidget {
-  const _LocationNotice({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Row(
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            Icons.location_off_outlined,
-            size: 16,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+          Row(
+            children: [
+              AppIconContainer(
+                icon: Icons.home_work_outlined,
+                backgroundColor: theme.colorScheme.surface.withValues(
+                  alpha: 0.72,
+                ),
+                foregroundColor: theme.colorScheme.onPrimaryContainer,
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'CURRENT HUB',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        letterSpacing: 0.7,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hubName,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              TextButton.icon(
+                onPressed: onOpenSplitBoard,
+                icon: const Icon(Icons.arrow_forward_outlined),
+                label: const Text('View deals'),
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onLeave,
+                icon: const Icon(Icons.logout_outlined),
+                label: const Text('Leave hub'),
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -258,7 +275,7 @@ class _HubList extends StatelessWidget {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      padding: const EdgeInsets.fromLTRB(20, 2, 20, 24),
       itemCount: hubs.length,
       separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
@@ -291,9 +308,7 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasQuery = query.trim().isNotEmpty;
-
     final radiusKm = (kNearbyRadiusMeters / 1000).round();
 
     final String title;
@@ -301,51 +316,25 @@ class _EmptyState extends StatelessWidget {
     if (hasQuery) {
       title = 'No hubs match "$query"';
       hint = nearbyOnly
-          ? 'Nothing within $radiusKm km matches. Check the spelling, or turn '
-                'off the distance filter.'
-          : 'Check the spelling, or ask your RA to get your hub added.';
+          ? 'Nothing within $radiusKm km matches. Check the spelling or turn off the distance filter.'
+          : 'Check the spelling or register the hub if it is missing.';
     } else if (nearbyOnly) {
       title = 'No hubs nearby';
       hint =
-          'Nothing is within $radiusKm km of you. Turn off the distance filter '
-          'to see every hub.';
+          'Nothing is within $radiusKm km of you. Turn off the distance filter to see every hub.';
     } else {
       title = 'No hubs yet';
       hint = 'Register a hub to get your building on the list.';
     }
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              nearbyOnly && !hasQuery
-                  ? Icons.near_me_disabled_outlined
-                  : Icons.inventory_2_outlined,
-              size: 40,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              hint,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return AppMessageState(
+      icon: nearbyOnly && !hasQuery
+          ? Icons.near_me_disabled_outlined
+          : hasQuery
+          ? Icons.search_off_outlined
+          : Icons.home_work_outlined,
+      title: title,
+      message: hint,
     );
   }
 }

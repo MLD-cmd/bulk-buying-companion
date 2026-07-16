@@ -357,7 +357,9 @@ void main() {
       isNotNull,
     );
 
-    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    final submitButton = find.byKey(const Key('hub-submit-button'));
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
     await tester.pumpAndSettle();
 
     // Back on Find your hub, with the new hub in the directory.
@@ -386,7 +388,9 @@ void main() {
       find.byKey(const Key('hub-longitude-field')),
       '123.9100',
     );
-    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    final submitButton = find.byKey(const Key('hub-submit-button'));
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
     await tester.pumpAndSettle();
 
     // Still on the form, with the reason shown.

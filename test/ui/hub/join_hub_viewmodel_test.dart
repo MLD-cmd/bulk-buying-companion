@@ -257,7 +257,11 @@ void main() {
     hubRepository.releaseJoins();
     await Future.wait([first, second]);
 
-    expect(hubRepository.joinCalls, 1, reason: 'the second tap must be a no-op');
+    expect(
+      hubRepository.joinCalls,
+      1,
+      reason: 'the second tap must be a no-op',
+    );
     expect(viewModel.joinedHub?.memberCount, 4, reason: 'was 3 before joining');
     expect(viewModel.isUpdatingMembership, isFalse);
   });
