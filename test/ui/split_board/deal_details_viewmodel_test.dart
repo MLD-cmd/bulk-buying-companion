@@ -118,6 +118,35 @@ void main() {
     expect(viewModel.deal.status, DealStatus.readyForPickup);
     expect(viewModel.canMarkPurchased, isFalse);
     expect(viewModel.canMarkCollected, isTrue);
+    expect(
+      viewModel.pickupProgressLabel,
+      '1 of 2 picked up - 1 pickup remaining',
+    );
+  });
+
+  test('pickup progress completes when the last student collects', () async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 1, totalSlots: 2),
+      currentUserId: 'host',
+    );
+    await repository.reserveSlotFor('ana');
+    await repository.markPurchased('d');
+    final viewModel = DealDetailsViewModel(
+      reservationRepository: repository,
+      deal: repository.deal,
+      currentUserId: 'host',
+    );
+    await pumpEventQueue();
+
+    expect(
+      viewModel.pickupProgressLabel,
+      '1 of 2 picked up - 1 pickup remaining',
+    );
+
+    await viewModel.setCollected('ana', collected: true);
+
+    expect(viewModel.deal.status, DealStatus.completed);
+    expect(viewModel.pickupProgressLabel, 'All 2 pickups are collected.');
   });
 
   test('a student sees no host controls', () async {
