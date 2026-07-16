@@ -1,5 +1,3 @@
-import 'dart:ui' show SemanticsFlag;
-
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
@@ -114,7 +112,7 @@ void main() {
       find.byKey(const Key('detail-slot-progress')),
     );
     expect(slotProgress.label, contains('2 of 5 slots claimed'));
-    expect(slotProgress.hasFlag(SemanticsFlag.isReadOnly), isTrue);
+    expect(slotProgress.flagsCollection.isReadOnly, isTrue);
 
     // Pickup details.
     expect(find.text('USJR Main Gate'), findsOneWidget);

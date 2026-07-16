@@ -1,7 +1,7 @@
 # Frontend Redesign Design
 
 Date: 2026-07-16
-Status: Approved mock; awaiting written-spec review
+Status: Approved and implemented on feature branch; awaiting release review
 
 ## Goal
 

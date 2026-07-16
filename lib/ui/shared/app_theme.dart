@@ -15,12 +15,6 @@ class AppTheme {
   static const warningContainer = Color(0xFFFFF3D6);
   static const onWarningContainer = Color(0xFF713F12);
 
-  // Temporary compatibility names while existing screens move onto semantic
-  // ColorScheme roles. They are removed after the screen migration tasks.
-  static const accent = primary;
-  static const good = success;
-  static const goodBg = successContainer;
-
   static const _lightScheme = ColorScheme(
     brightness: Brightness.light,
     primary: primary,
@@ -145,10 +139,18 @@ class AppTheme {
       titleSmall: heading(baseTextTheme.titleSmall),
       bodyLarge: body(baseTextTheme.bodyLarge),
       bodyMedium: body(baseTextTheme.bodyMedium),
-      bodySmall: body(baseTextTheme.bodySmall).copyWith(color: mutedColor),
+      bodySmall: body(
+        baseTextTheme.bodySmall,
+      ).copyWith(color: mutedColor, fontSize: 14),
       labelLarge: body(baseTextTheme.labelLarge, weight: FontWeight.w500),
-      labelMedium: body(baseTextTheme.labelMedium, weight: FontWeight.w500),
-      labelSmall: body(baseTextTheme.labelSmall, weight: FontWeight.w500),
+      labelMedium: body(
+        baseTextTheme.labelMedium,
+        weight: FontWeight.w500,
+      ).copyWith(fontSize: 14),
+      labelSmall: body(
+        baseTextTheme.labelSmall,
+        weight: FontWeight.w500,
+      ).copyWith(fontSize: 12),
     );
 
     const controlRadius = BorderRadius.all(Radius.circular(12));

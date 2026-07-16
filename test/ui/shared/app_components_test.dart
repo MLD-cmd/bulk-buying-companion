@@ -1,5 +1,3 @@
-import 'dart:ui' show SemanticsFlag;
-
 import 'package:bulk_buying_companion/ui/shared/app_banner.dart';
 import 'package:bulk_buying_companion/ui/shared/app_form_section.dart';
 import 'package:bulk_buying_companion/ui/shared/app_icon_container.dart';
@@ -18,9 +16,7 @@ void main() {
     expect(find.text('Could not load deals.'), findsOneWidget);
     expect(find.byIcon(Icons.error_outline), findsOneWidget);
     expect(
-      tester
-          .getSemantics(find.byType(AppBanner))
-          .hasFlag(SemanticsFlag.isLiveRegion),
+      tester.getSemantics(find.byType(AppBanner)).flagsCollection.isLiveRegion,
       isTrue,
     );
   });

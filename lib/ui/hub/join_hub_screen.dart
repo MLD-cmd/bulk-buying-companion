@@ -238,16 +238,20 @@ class _CurrentHubBanner extends StatelessWidget {
                 onPressed: onOpenSplitBoard,
                 icon: const Icon(Icons.arrow_forward_outlined),
                 label: const Text('View deals'),
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.colorScheme.onPrimaryContainer,
+                style: ButtonStyle(
+                  foregroundColor: WidgetStatePropertyAll(
+                    theme.colorScheme.onPrimaryContainer,
+                  ),
                 ),
               ),
               TextButton.icon(
                 onPressed: onLeave,
                 icon: const Icon(Icons.logout_outlined),
                 label: const Text('Leave hub'),
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.colorScheme.error,
+                style: ButtonStyle(
+                  foregroundColor: WidgetStatePropertyAll(
+                    theme.colorScheme.error,
+                  ),
                 ),
               ),
             ],

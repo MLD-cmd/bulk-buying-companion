@@ -352,11 +352,11 @@ class _ModeSelector extends StatelessWidget {
                     color: selected ? scheme.surface : Colors.transparent,
                     borderRadius: BorderRadius.circular(9),
                     boxShadow: selected
-                        ? const [
+                        ? [
                             BoxShadow(
-                              color: Color(0x10000000),
+                              color: scheme.shadow.withValues(alpha: 0.06),
                               blurRadius: 6,
-                              offset: Offset(0, 1),
+                              offset: const Offset(0, 1),
                             ),
                           ]
                         : null,

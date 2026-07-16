@@ -10,6 +10,8 @@ void main() {
     expect(theme.scaffoldBackgroundColor, const Color(0xFFF6FAF9));
     expect(theme.textTheme.bodyMedium?.fontFamily, 'Manrope');
     expect(theme.textTheme.headlineSmall?.fontFamily, 'Outfit');
+    expect(theme.textTheme.bodySmall?.fontSize, greaterThanOrEqualTo(14));
+    expect(theme.textTheme.labelMedium?.fontSize, greaterThanOrEqualTo(14));
   });
 
   test('dark theme keeps teal actions on dark neutral surfaces', () {
