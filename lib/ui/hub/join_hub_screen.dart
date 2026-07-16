@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../notifications/notifications_screen.dart';
 import '../profile/profile_screen.dart';
 import '../shared/app_banner.dart';
 import '../shared/app_icon_container.dart';
@@ -19,6 +20,20 @@ class JoinHubScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Find your hub'),
         actions: [
+          Consumer<JoinHubViewModel>(
+            builder: (context, viewModel, _) {
+              final hub = viewModel.joinedHub;
+              if (hub == null) return const SizedBox.shrink();
+
+              return IconButton(
+                icon: const Icon(Icons.notifications_none_outlined),
+                tooltip: 'Notifications',
+                onPressed: () => Navigator.of(context).push(
+                  NotificationsScreen.route(hubId: hub.id, hubName: hub.name),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add_location_alt_outlined),
             tooltip: 'Register a hub',

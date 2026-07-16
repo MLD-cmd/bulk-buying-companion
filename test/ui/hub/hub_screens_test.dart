@@ -1,6 +1,8 @@
 import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/hub_repository.dart';
+import 'package:bulk_buying_companion/data/repositories/notification_repository.dart';
 import 'package:bulk_buying_companion/data/services/location_service.dart';
+import 'package:bulk_buying_companion/models/deal_notification.dart';
 import 'package:bulk_buying_companion/ui/hub/create_hub_screen.dart';
 import 'package:bulk_buying_companion/ui/hub/create_hub_viewmodel.dart';
 import 'package:bulk_buying_companion/ui/hub/join_hub_screen.dart';
@@ -76,6 +78,44 @@ void main() {
     expect(find.byKey(const Key('hub-longitude-field')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('current hub exposes notifications', (tester) async {
+    final authRepository = MockAuthRepository();
+    await authRepository.signIn(
+      email: 'student@usjr.edu.ph',
+      password: 'Student123',
+    );
+    final hubRepository = MockHubRepository();
+    await hubRepository.joinHub(
+      userId: authRepository.currentUser!.uid,
+      hubId: 'colon',
+    );
+    final viewModel = JoinHubViewModel(
+      authRepository: authRepository,
+      hubRepository: hubRepository,
+      locationService: const _LocationStub(),
+    );
+    addTearDown(viewModel.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<AuthRepository>.value(value: authRepository),
+          Provider<NotificationRepository>.value(
+            value: const _NotificationStub([]),
+          ),
+          ChangeNotifierProvider.value(value: viewModel),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const JoinHubScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Notifications'), findsOneWidget);
+  });
 }
 
 class _LocationStub implements LocationService {
@@ -84,5 +124,19 @@ class _LocationStub implements LocationService {
   @override
   Future<Coordinates> getCurrentPosition() async {
     return const Coordinates(latitude: 10.2954, longitude: 123.8969);
+  }
+}
+
+class _NotificationStub implements NotificationRepository {
+  const _NotificationStub(this.notifications);
+
+  final List<DealNotification> notifications;
+
+  @override
+  Future<List<DealNotification>> getNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) async {
+    return notifications;
   }
 }

@@ -7,6 +7,7 @@ import 'config/supabase_config.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/deal_repository.dart';
 import 'data/repositories/hub_repository.dart';
+import 'data/repositories/notification_repository.dart';
 import 'data/repositories/reservation_repository.dart';
 import 'data/repositories/supabase_auth_repository.dart';
 import 'data/services/location_service.dart';
@@ -88,6 +89,12 @@ class BulkBuyingCompanionApp extends StatelessWidget {
             }
             return repository;
           },
+        ),
+        Provider<NotificationRepository>(
+          create: (context) => DerivedNotificationRepository(
+            dealRepository: context.read<DealRepository>(),
+            reservationRepository: context.read<ReservationRepository>(),
+          ),
         ),
         Provider<LocationService>(
           create: (_) => locationService ?? const GeolocatorLocationService(),
