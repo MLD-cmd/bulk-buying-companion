@@ -139,4 +139,12 @@ class _NotificationStub implements NotificationRepository {
   }) async {
     return notifications;
   }
+
+  @override
+  Stream<List<DealNotification>> watchNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) {
+    return Stream.value(notifications);
+  }
 }

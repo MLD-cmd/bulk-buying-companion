@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/notification_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
@@ -40,6 +42,52 @@ void main() {
       ]);
     },
   );
+
+  test(
+    're-emits derived notifications when realtime invalidation arrives',
+    () async {
+      final invalidations = StreamController<void>();
+      addTearDown(invalidations.close);
+      final dealStub = _MutableDealStub([
+        _deal(id: 'water', purchasedAt: DateTime(2026, 7, 16)),
+      ]);
+      final reservationStub = _MutableReservationStub({
+        'water': [
+          _reservation(dealId: 'water', userId: 'host', isHost: true),
+          _reservation(dealId: 'water', userId: 'ana', paidAt: _now),
+        ],
+      });
+      final repository = DerivedNotificationRepository(
+        dealRepository: dealStub,
+        reservationRepository: reservationStub,
+        invalidationSource: _InvalidationStub(invalidations.stream),
+      );
+
+      final iterator = StreamIterator(
+        repository.watchNotifications(hubId: 'colon', currentUserId: 'ana'),
+      );
+      addTearDown(iterator.cancel);
+
+      expect(await iterator.moveNext(), isTrue);
+      expect(iterator.current.map((item) => item.kind), [
+        DealNotificationKind.pickupReminder,
+      ]);
+
+      reservationStub.participantsByDeal['water'] = [
+        _reservation(dealId: 'water', userId: 'host', isHost: true),
+        _reservation(
+          dealId: 'water',
+          userId: 'ana',
+          paidAt: _now,
+          collectedAt: _now,
+        ),
+      ];
+      invalidations.add(null);
+
+      expect(await iterator.moveNext(), isTrue);
+      expect(iterator.current, isEmpty);
+    },
+  );
 }
 
 final _now = DateTime(2026, 7, 16);
@@ -72,6 +120,7 @@ Reservation _reservation({
   required String userId,
   bool isHost = false,
   DateTime? paidAt,
+  DateTime? collectedAt,
 }) {
   return Reservation(
     dealId: dealId,
@@ -79,6 +128,7 @@ Reservation _reservation({
     isHost: isHost,
     reservedAt: _now,
     paidAt: paidAt,
+    collectedAt: collectedAt,
   );
 }
 
@@ -139,4 +189,62 @@ class _ReservationStub implements ReservationRepository {
   Future<Deal> setPaid(String dealId, String userId, {required bool paid}) {
     throw UnimplementedError();
   }
+}
+
+class _MutableDealStub extends _DealStub {
+  _MutableDealStub(super.deals);
+}
+
+class _MutableReservationStub implements ReservationRepository {
+  _MutableReservationStub(this.participantsByDeal);
+
+  Map<String, List<Reservation>> participantsByDeal;
+
+  @override
+  Future<Deal> cancelDeal(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> cancelReservation(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<Reservation>> getParticipants(String dealId) async {
+    return participantsByDeal[dealId] ?? const [];
+  }
+
+  @override
+  Future<Deal> markPurchased(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> reserveSlot(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> setCollected(
+    String dealId,
+    String userId, {
+    required bool collected,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> setPaid(String dealId, String userId, {required bool paid}) {
+    throw UnimplementedError();
+  }
+}
+
+class _InvalidationStub implements NotificationInvalidationSource {
+  const _InvalidationStub(this.stream);
+
+  final Stream<void> stream;
+
+  @override
+  Stream<void> watchHub(String hubId) => stream;
 }

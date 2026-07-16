@@ -43,6 +43,9 @@ Future<void> main() async {
       hubRepository: hubRepository,
       dealRepository: dealRepository,
       reservationRepository: reservationRepository,
+      notificationInvalidationSource: SupabaseNotificationInvalidationSource(
+        client,
+      ),
     ),
   );
 }
@@ -54,6 +57,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     this.hubRepository,
     this.dealRepository,
     this.reservationRepository,
+    this.notificationInvalidationSource,
     this.locationService,
   });
 
@@ -61,6 +65,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
   final HubRepository? hubRepository;
   final DealRepository? dealRepository;
   final ReservationRepository? reservationRepository;
+  final NotificationInvalidationSource? notificationInvalidationSource;
   final LocationService? locationService;
 
   @override
@@ -94,6 +99,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
           create: (context) => DerivedNotificationRepository(
             dealRepository: context.read<DealRepository>(),
             reservationRepository: context.read<ReservationRepository>(),
+            invalidationSource: notificationInvalidationSource,
           ),
         ),
         Provider<LocationService>(

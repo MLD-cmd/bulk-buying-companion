@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/notification_repository.dart';
@@ -9,7 +11,9 @@ class NotificationsViewModel extends ChangeNotifier {
     required this.hubId,
     required this.currentUserId,
   }) : _notificationRepository = notificationRepository {
-    refresh();
+    _subscription = _notificationRepository
+        .watchNotifications(hubId: hubId, currentUserId: currentUserId)
+        .listen(_setNotifications, onError: (_) => _setError());
   }
 
   final NotificationRepository _notificationRepository;
@@ -20,6 +24,7 @@ class NotificationsViewModel extends ChangeNotifier {
   bool _isLoading = true;
   String? _errorMessage;
   bool _isDisposed = false;
+  late final StreamSubscription<List<DealNotification>> _subscription;
 
   List<DealNotification> get notifications => _notifications;
   bool get isLoading => _isLoading;
@@ -45,6 +50,20 @@ class NotificationsViewModel extends ChangeNotifier {
     }
   }
 
+  void _setNotifications(List<DealNotification> notifications) {
+    _notifications = notifications;
+    _errorMessage = null;
+    _isLoading = false;
+    _notifyIfAlive();
+  }
+
+  void _setError() {
+    _notifications = const [];
+    _errorMessage = 'Could not load notifications. Please try again.';
+    _isLoading = false;
+    _notifyIfAlive();
+  }
+
   void _notifyIfAlive() {
     if (!_isDisposed) notifyListeners();
   }
@@ -52,6 +71,7 @@ class NotificationsViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _subscription.cancel();
     super.dispose();
   }
 }

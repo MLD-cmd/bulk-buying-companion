@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/notification_repository.dart';
 import 'package:bulk_buying_companion/models/deal_notification.dart';
 import 'package:bulk_buying_companion/ui/notifications/notifications_screen.dart';
@@ -51,6 +53,57 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('updates cards when realtime notifications arrive', (
+    tester,
+  ) async {
+    final controller = StreamController<List<DealNotification>>();
+    final viewModel = NotificationsViewModel(
+      notificationRepository: _StreamingNotificationStub(controller.stream),
+      hubId: 'colon',
+      currentUserId: 'ana',
+    );
+    addTearDown(viewModel.dispose);
+    addTearDown(controller.close);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: viewModel,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const NotificationsScreen(hubName: 'Colon Hub'),
+        ),
+      ),
+    );
+
+    controller.add(const [
+      DealNotification(
+        id: 'rice-payment',
+        dealId: 'rice',
+        kind: DealNotificationKind.paymentReminder,
+        title: 'Payment reminder',
+        message: 'Pay P100 for Rice Sack before 7/20/2026.',
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Payment reminder'), findsOneWidget);
+    expect(find.text('Pickup reminder'), findsNothing);
+
+    controller.add(const [
+      DealNotification(
+        id: 'water-pickup',
+        dealId: 'water',
+        kind: DealNotificationKind.pickupReminder,
+        title: 'Pickup reminder',
+        message: 'Pick up Water Case at Campus Gate.',
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Payment reminder'), findsNothing);
+    expect(find.text('Pickup reminder'), findsOneWidget);
+  });
 }
 
 class _NotificationStub implements NotificationRepository {
@@ -64,5 +117,35 @@ class _NotificationStub implements NotificationRepository {
     required String currentUserId,
   }) async {
     return notifications;
+  }
+
+  @override
+  Stream<List<DealNotification>> watchNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) {
+    return Stream.value(notifications);
+  }
+}
+
+class _StreamingNotificationStub implements NotificationRepository {
+  const _StreamingNotificationStub(this.stream);
+
+  final Stream<List<DealNotification>> stream;
+
+  @override
+  Future<List<DealNotification>> getNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Stream<List<DealNotification>> watchNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) {
+    return stream;
   }
 }
