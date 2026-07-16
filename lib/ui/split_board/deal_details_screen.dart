@@ -53,11 +53,11 @@ class DealDetailsScreen extends StatelessWidget {
             appBar: AppBar(
               title: const Text('Deal details'),
               actions: [
-                IconButton(
+                TextButton.icon(
                   key: const Key('detail-report-button'),
-                  tooltip: 'Report deal or user',
                   onPressed: () => _showReportSheet(context, viewModel),
                   icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Report'),
                 ),
               ],
             ),
@@ -395,7 +395,7 @@ class _ReportSheetState extends State<_ReportSheet> {
                   value: ReportTargetType.deal,
                   groupValue: _targetType,
                   onChanged: _isSubmitting ? null : _setTargetType,
-                  title: const Text('Deal'),
+                  title: const Text('Report this deal'),
                 ),
                 if (canReportUser)
                   RadioListTile<ReportTargetType>(
