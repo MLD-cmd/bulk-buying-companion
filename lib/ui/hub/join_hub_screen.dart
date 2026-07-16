@@ -5,6 +5,7 @@ import '../profile/profile_screen.dart';
 import '../shared/app_banner.dart';
 import '../shared/app_icon_container.dart';
 import '../shared/app_message_state.dart';
+import '../shared/task_help_sheet.dart';
 import '../split_board/split_board_screen.dart';
 import 'create_hub_screen.dart';
 import 'join_hub_viewmodel.dart';
@@ -28,11 +29,44 @@ class _HubContent extends StatelessWidget {
   }
 }
 
-class JoinHubScreen extends StatelessWidget {
+class JoinHubScreen extends StatefulWidget {
   const JoinHubScreen({super.key});
+
+  static const _helpLabel = 'How to find and join a hub';
+
+  static const _helpSteps = [
+    TaskHelpStep(
+      icon: Icons.search_outlined,
+      title: 'Search or use distance',
+      body: 'Search by hub, building, or area. Filter by distance when shown.',
+    ),
+    TaskHelpStep(
+      icon: Icons.domain_outlined,
+      title: 'Review type and details',
+      body: 'Check the hub type, members, and distance before choosing.',
+    ),
+    TaskHelpStep(
+      icon: Icons.group_add_outlined,
+      title: 'Join or switch',
+      body: 'Join a hub, or confirm a switch from your current hub.',
+    ),
+  ];
+
+  @override
+  State<JoinHubScreen> createState() => _JoinHubScreenState();
+}
+
+class _JoinHubScreenState extends State<JoinHubScreen> {
+  bool _leaveDialogInFlight = false;
 
   @override
   Widget build(BuildContext context) {
+    void showHelp() => showTaskHelpSheet(
+      context,
+      title: JoinHubScreen._helpLabel,
+      steps: JoinHubScreen._helpSteps,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Find your hub'),
@@ -41,6 +75,19 @@ class JoinHubScreen extends StatelessWidget {
             icon: const Icon(Icons.add_location_alt_outlined),
             tooltip: 'Register a hub',
             onPressed: () => _registerHub(context),
+          ),
+          Semantics(
+            key: const Key('hub-help-button-semantics'),
+            label: JoinHubScreen._helpLabel,
+            button: true,
+            onTap: showHelp,
+            excludeSemantics: true,
+            child: IconButton(
+              icon: const Icon(Icons.help_outline),
+              tooltip: JoinHubScreen._helpLabel,
+              style: IconButton.styleFrom(minimumSize: const Size.square(48)),
+              onPressed: showHelp,
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.person_outline),
@@ -57,63 +104,203 @@ class JoinHubScreen extends StatelessWidget {
               return const Center(child: CircularProgressIndicator());
             }
 
-            return Column(
-              children: [
-                if (viewModel.joinedHub != null)
-                  _CurrentHubBanner(
-                    hubName: viewModel.joinedHub!.name,
-                    onLeave: viewModel.leave,
-                    onOpenSplitBoard: () => Navigator.of(context).push(
-                      SplitBoardScreen.route(
-                        viewModel.joinedHub!.id,
-                        viewModel.joinedHub!.name,
+            if (viewModel.directoryErrorMessage != null &&
+                !viewModel.hasDirectoryData) {
+              return AppMessageState(
+                icon: Icons.cloud_off_outlined,
+                title: 'Couldn’t load hubs',
+                message: 'Check your connection and try again.',
+                onRetry: viewModel.refresh,
+              );
+            }
+
+            final joinedHub = viewModel.joinedHub;
+
+            return CustomScrollView(
+              slivers: [
+                if (joinedHub != null)
+                  SliverToBoxAdapter(
+                    child: _CurrentHubBanner(
+                      hubName: joinedHub.name,
+                      isBusy: viewModel.isUpdatingMembership,
+                      isLeaving: viewModel.isLeaving,
+                      onLeave: () => _confirmLeave(
+                        context,
+                        viewModel,
+                        expectedHubId: joinedHub.id,
+                        hubName: joinedHub.name,
+                      ),
+                      onOpenSplitBoard: () => _openSplitBoard(
+                        context,
+                        viewModel,
+                        expectedHubId: joinedHub.id,
+                        hubName: joinedHub.name,
                       ),
                     ),
                   ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
-                  child: _HubContent(
-                    child: _SearchField(
-                      query: viewModel.searchQuery,
-                      onChanged: viewModel.setSearchQuery,
+                if (viewModel.directoryErrorMessage != null ||
+                    viewModel.membershipErrorMessage != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      child: _HubContent(
+                        child: Column(
+                          children: [
+                            if (viewModel.directoryErrorMessage != null)
+                              AppBanner.error(
+                                message: viewModel.directoryErrorMessage!,
+                                actionLabel: 'Try again',
+                                onAction: viewModel.refresh,
+                              ),
+                            if (viewModel.directoryErrorMessage != null &&
+                                viewModel.membershipErrorMessage != null)
+                              const SizedBox(height: 8),
+                            if (viewModel.membershipErrorMessage != null)
+                              AppBanner.error(
+                                message: viewModel.membershipErrorMessage!,
+                                actionLabel: 'Try again',
+                                onAction: viewModel.retryMembership,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 10),
+                    child: _HubContent(
+                      child: _SearchField(
+                        query: viewModel.searchQuery,
+                        onChanged: viewModel.setSearchQuery,
+                      ),
                     ),
                   ),
                 ),
                 if (viewModel.canFilterByDistance)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                    child: _HubContent(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FilterChip(
-                          key: const Key('hub-nearby-filter'),
-                          avatar: const Icon(Icons.near_me_outlined, size: 18),
-                          label: Text(
-                            'Within ${(kNearbyRadiusMeters / 1000).round()} km',
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                      child: _HubContent(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilterChip(
+                            key: const Key('hub-nearby-filter'),
+                            avatar: const Icon(
+                              Icons.near_me_outlined,
+                              size: 18,
+                            ),
+                            label: Text(
+                              'Within ${(kNearbyRadiusMeters / 1000).round()} km',
+                            ),
+                            selected: viewModel.nearbyOnly,
+                            onSelected: viewModel.setNearbyOnly,
                           ),
-                          selected: viewModel.nearbyOnly,
-                          onSelected: viewModel.setNearbyOnly,
                         ),
                       ),
                     ),
                   )
                 else if (viewModel.locationFailureMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                    child: _HubContent(
-                      child: AppBanner.notice(
-                        message: viewModel.locationFailureMessage!,
-                        icon: Icons.location_off_outlined,
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                      child: _HubContent(
+                        child: AppBanner.notice(
+                          message: viewModel.locationFailureMessage!,
+                          icon: Icons.location_off_outlined,
+                          actionLabel: 'Try again',
+                          onAction: viewModel.retryLocation,
+                        ),
                       ),
                     ),
                   ),
-                Expanded(child: _HubList(viewModel: viewModel)),
+                _HubResultsSliver(viewModel: viewModel),
               ],
             );
           },
         ),
       ),
     );
+  }
+
+  Future<void> _confirmLeave(
+    BuildContext context,
+    JoinHubViewModel viewModel, {
+    required String expectedHubId,
+    required String hubName,
+  }) async {
+    if (_leaveDialogInFlight ||
+        !mounted ||
+        !context.mounted ||
+        viewModel.isUpdatingMembership ||
+        viewModel.joinedHubId != expectedHubId ||
+        viewModel.joinedHub?.id != expectedHubId) {
+      return;
+    }
+
+    _leaveDialogInFlight = true;
+    var membershipContextChanged = false;
+    void observeMembership() {
+      if (viewModel.isUpdatingMembership ||
+          viewModel.joinedHubId != expectedHubId) {
+        membershipContextChanged = true;
+      }
+    }
+
+    viewModel.addListener(observeMembership);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('Leave $hubName?'),
+          content: const Text(
+            'You’ll need to join a hub again before you can open its Split Board.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Stay'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Leave hub'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted ||
+          !context.mounted ||
+          confirmed != true ||
+          membershipContextChanged ||
+          viewModel.isUpdatingMembership ||
+          viewModel.joinedHubId != expectedHubId ||
+          viewModel.joinedHub?.id != expectedHubId) {
+        return;
+      }
+
+      await viewModel.leave();
+    } finally {
+      viewModel.removeListener(observeMembership);
+      _leaveDialogInFlight = false;
+    }
+  }
+
+  void _openSplitBoard(
+    BuildContext context,
+    JoinHubViewModel viewModel, {
+    required String expectedHubId,
+    required String hubName,
+  }) {
+    if (!mounted ||
+        !context.mounted ||
+        viewModel.isUpdatingMembership ||
+        viewModel.joinedHubId != expectedHubId ||
+        viewModel.joinedHub?.id != expectedHubId) {
+      return;
+    }
+
+    Navigator.of(context).push(SplitBoardScreen.route(expectedHubId, hubName));
   }
 }
 
@@ -194,11 +381,15 @@ class _SearchFieldState extends State<_SearchField> {
 class _CurrentHubBanner extends StatelessWidget {
   const _CurrentHubBanner({
     required this.hubName,
+    required this.isBusy,
+    required this.isLeaving,
     required this.onLeave,
     required this.onOpenSplitBoard,
   });
 
   final String hubName;
+  final bool isBusy;
+  final bool isLeaving;
   final VoidCallback onLeave;
   final VoidCallback onOpenSplitBoard;
 
@@ -206,92 +397,136 @@ class _CurrentHubBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-      child: _HubContent(
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.18),
-            ),
-          ),
+    Widget identity() => Row(
+      key: const Key('current-hub-identity'),
+      children: [
+        AppIconContainer(
+          icon: Icons.home_work_outlined,
+          backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.72),
+          foregroundColor: theme.colorScheme.onPrimaryContainer,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  AppIconContainer(
-                    icon: Icons.home_work_outlined,
-                    backgroundColor: theme.colorScheme.surface.withValues(
-                      alpha: 0.72,
-                    ),
-                    foregroundColor: theme.colorScheme.onPrimaryContainer,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'CURRENT HUB',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                            letterSpacing: 0.7,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          hubName,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Text(
+                'CURRENT HUB',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onPrimaryContainer,
+                  letterSpacing: 0.7,
+                ),
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  TextButton.icon(
-                    onPressed: onOpenSplitBoard,
-                    icon: const Icon(Icons.arrow_forward_outlined),
-                    label: const Text('View deals'),
-                    style: ButtonStyle(
-                      foregroundColor: WidgetStatePropertyAll(
-                        theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                  TextButton.icon(
-                    onPressed: onLeave,
-                    icon: const Icon(Icons.logout_outlined),
-                    label: const Text('Leave hub'),
-                    style: ButtonStyle(
-                      foregroundColor: WidgetStatePropertyAll(
-                        theme.colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 2),
+              Text(
+                hubName,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
               ),
             ],
           ),
+        ),
+      ],
+    );
+
+    List<Widget> actionButtons() => [
+      TextButton.icon(
+        onPressed: isBusy ? null : onOpenSplitBoard,
+        icon: const Icon(Icons.arrow_forward_outlined),
+        label: const Text('View deals'),
+        style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          foregroundColor: theme.colorScheme.onPrimaryContainer,
+        ),
+      ),
+      TextButton.icon(
+        onPressed: isBusy ? null : onLeave,
+        icon: isLeaving
+            ? ExcludeSemantics(
+                child: SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(
+                    color: theme.colorScheme.error,
+                    strokeWidth: 2.2,
+                  ),
+                ),
+              )
+            : const Icon(Icons.logout_outlined),
+        label: Text(isLeaving ? 'Leaving…' : 'Leave hub'),
+        style: TextButton.styleFrom(
+          minimumSize: const Size(48, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          foregroundColor: theme.colorScheme.error,
+        ),
+      ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      child: _HubContent(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final textScale = MediaQuery.textScalerOf(context).scale(1);
+            final useCompactRow =
+                constraints.maxWidth >= 560 && textScale <= 1.3;
+            final actions = actionButtons();
+
+            final content = useCompactRow
+                ? Row(
+                    children: [
+                      Expanded(child: identity()),
+                      const SizedBox(width: 12),
+                      Row(
+                        key: const Key('current-hub-actions'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          actions.first,
+                          const SizedBox(width: 4),
+                          actions.last,
+                        ],
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      identity(),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Wrap(
+                          key: const Key('current-hub-actions'),
+                          alignment: WrapAlignment.end,
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: actions,
+                        ),
+                      ),
+                    ],
+                  );
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                ),
+              ),
+              child: content,
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _HubList extends StatelessWidget {
-  const _HubList({required this.viewModel});
+class _HubResultsSliver extends StatelessWidget {
+  const _HubResultsSliver({required this.viewModel});
 
   final JoinHubViewModel viewModel;
 
@@ -300,36 +535,45 @@ class _HubList extends StatelessWidget {
     final hubs = viewModel.filteredHubs;
 
     if (hubs.isEmpty) {
-      return _EmptyState(
-        query: viewModel.searchQuery,
-        nearbyOnly: viewModel.nearbyOnly,
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: _EmptyState(
+          query: viewModel.searchQuery,
+          nearbyOnly: viewModel.nearbyOnly,
+        ),
       );
     }
 
-    return ListView.separated(
+    return SliverPadding(
       padding: const EdgeInsets.fromLTRB(20, 2, 20, 24),
-      itemCount: hubs.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final hub = hubs[index];
-        final isJoined = viewModel.joinedHubId == hub.id;
-        final isPending = viewModel.pendingSwitchId == hub.id;
-        final showSwitch = !isJoined && viewModel.joinedHubId != null;
+      sliver: SliverList.builder(
+        itemCount: hubs.length,
+        itemBuilder: (context, index) {
+          final hub = hubs[index];
+          final isJoined = viewModel.joinedHubId == hub.id;
+          final isPending = viewModel.pendingSwitchId == hub.id;
+          final showSwitch = !isJoined && viewModel.joinedHubId != null;
 
-        return _HubContent(
-          child: HubCard(
-            hub: hub,
-            isJoined: isJoined,
-            isPendingSwitch: isPending,
-            showSwitchAction: showSwitch,
-            isBusy: viewModel.isUpdatingMembership,
-            onJoin: () => viewModel.join(hub.id),
-            onRequestSwitch: () => viewModel.requestSwitch(hub.id),
-            onConfirmSwitch: viewModel.confirmSwitch,
-            onCancelSwitch: viewModel.cancelSwitch,
-          ),
-        );
-      },
+          return Padding(
+            padding: EdgeInsets.only(bottom: index == hubs.length - 1 ? 0 : 10),
+            child: _HubContent(
+              child: HubCard(
+                hub: hub,
+                isJoined: isJoined,
+                isPendingSwitch: isPending,
+                showSwitchAction: showSwitch,
+                isBusy: viewModel.isUpdatingMembership,
+                isUpdatingThisHub: viewModel.isUpdatingHub(hub.id),
+                busyLabel: showSwitch ? 'Switching…' : 'Joining…',
+                onJoin: () => viewModel.join(hub.id),
+                onRequestSwitch: () => viewModel.requestSwitch(hub.id),
+                onConfirmSwitch: viewModel.confirmSwitch,
+                onCancelSwitch: viewModel.cancelSwitch,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -361,14 +605,43 @@ class _EmptyState extends StatelessWidget {
       hint = 'Register a hub to get your building on the list.';
     }
 
-    return AppMessageState(
-      icon: nearbyOnly && !hasQuery
-          ? Icons.near_me_disabled_outlined
-          : hasQuery
-          ? Icons.search_off_outlined
-          : Icons.home_work_outlined,
-      title: title,
-      message: hint,
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppIconContainer(
+                icon: nearbyOnly && !hasQuery
+                    ? Icons.near_me_disabled_outlined
+                    : hasQuery
+                    ? Icons.search_off_outlined
+                    : Icons.home_work_outlined,
+                size: 52,
+                iconSize: 24,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                hint,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
