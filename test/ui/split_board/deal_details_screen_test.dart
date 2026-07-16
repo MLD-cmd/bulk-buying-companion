@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
+import 'package:bulk_buying_companion/data/repositories/report_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/ui/split_board/deal_details_screen.dart';
@@ -12,6 +15,7 @@ void main() {
     WidgetTester tester,
     Deal deal, {
     String currentUserId = 'visitor',
+    ReportRepository? reportRepository,
   }) async {
     // Tall enough that the whole scrollable body — including the reserve
     // button below the new participants list — renders onstage, so plain
@@ -23,16 +27,23 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ChangeNotifierProvider(
-          create: (_) => DealDetailsViewModel(
-            deal: deal,
-            currentUserId: currentUserId,
-            reservationRepository: MockReservationRepository(
+        home: MultiProvider(
+          providers: [
+            Provider<ReportRepository>.value(
+              value: reportRepository ?? _RecordingReportRepository(),
+            ),
+          ],
+          child: ChangeNotifierProvider(
+            create: (_) => DealDetailsViewModel(
               deal: deal,
               currentUserId: currentUserId,
+              reservationRepository: MockReservationRepository(
+                deal: deal,
+                currentUserId: currentUserId,
+              ),
             ),
+            child: const DealDetailsScreen(),
           ),
-          child: const DealDetailsScreen(),
         ),
       ),
     );
@@ -44,6 +55,7 @@ void main() {
     WidgetTester tester, {
     required MockReservationRepository repository,
     required String currentUserId,
+    ReportRepository? reportRepository,
   }) async {
     // Tall enough that the whole scrollable body renders onstage, so plain
     // find.text / find.byKey see it without a manual scroll.
@@ -54,13 +66,20 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ChangeNotifierProvider(
-          create: (_) => DealDetailsViewModel(
-            deal: repository.deal,
-            currentUserId: currentUserId,
-            reservationRepository: repository,
+        home: MultiProvider(
+          providers: [
+            Provider<ReportRepository>.value(
+              value: reportRepository ?? _RecordingReportRepository(),
+            ),
+          ],
+          child: ChangeNotifierProvider(
+            create: (_) => DealDetailsViewModel(
+              deal: repository.deal,
+              currentUserId: currentUserId,
+              reservationRepository: repository,
+            ),
+            child: const DealDetailsScreen(),
           ),
-          child: const DealDetailsScreen(),
         ),
       ),
     );
@@ -464,6 +483,54 @@ void main() {
     expect(find.text('All 2 pickups are collected.'), findsOneWidget);
     expect(find.textContaining('Collected '), findsNWidgets(2));
   });
+
+  testWidgets('a student can report the organiser from deal details', (
+    tester,
+  ) async {
+    final reportRepository = _RecordingReportRepository();
+    await pumpDetails(
+      tester,
+      _reservableDeal,
+      currentUserId: 'user-2',
+      reportRepository: reportRepository,
+    );
+
+    await tester.tap(find.byKey(const Key('detail-report-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report deal or user'), findsOneWidget);
+    await tester.tap(find.text('Organiser'));
+    await tester.tap(find.text('Inappropriate content'));
+    await tester.enterText(
+      find.byKey(const Key('report-explanation-field')),
+      'The organiser is asking for unrelated personal info.',
+    );
+    await tester.tap(find.byKey(const Key('submit-report-button')));
+    await tester.pumpAndSettle();
+
+    expect(reportRepository.submittedDrafts, hasLength(1));
+    expect(
+      reportRepository.submittedDrafts.single.dealId,
+      'colon-rice-reservable',
+    );
+    expect(
+      reportRepository.submittedDrafts.single.targetType,
+      ReportTargetType.user,
+    );
+    expect(reportRepository.submittedDrafts.single.reportedUserId, 'user-1');
+    expect(
+      reportRepository.submittedDrafts.single.reason,
+      ReportReason.inappropriate,
+    );
+    expect(
+      reportRepository.submittedDrafts.single.explanation,
+      'The organiser is asking for unrelated personal info.',
+    );
+    expect(
+      find.text('Report submitted. Thanks for helping keep this hub safe.'),
+      findsOneWidget,
+    );
+  });
 }
 
 final _deal = Deal(
@@ -555,3 +622,17 @@ const _reservableDeal = Deal(
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
 );
+
+class _RecordingReportRepository implements ReportRepository {
+  final submittedDrafts = <ReportDraft>[];
+
+  @override
+  Future<void> submitReport(ReportDraft draft) async {
+    submittedDrafts.add(draft);
+  }
+
+  @override
+  Stream<List<Report>> watchReports() async* {
+    yield const [];
+  }
+}

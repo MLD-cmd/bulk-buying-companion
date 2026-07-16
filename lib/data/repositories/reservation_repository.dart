@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/deal.dart';
@@ -34,6 +36,17 @@ abstract class ReservationRepository {
   Future<Deal> cancelDeal(String dealId);
 }
 
+class DealDetailsSnapshot {
+  const DealDetailsSnapshot({required this.deal, required this.participants});
+
+  final Deal deal;
+  final List<Reservation> participants;
+}
+
+abstract class RealtimeReservationRepository {
+  Stream<DealDetailsSnapshot> watchDealDetails(Deal deal);
+}
+
 /// Raised when a slot cannot be claimed or released. The message is user-facing.
 class ReservationFailure implements Exception {
   const ReservationFailure(this.message);
@@ -45,6 +58,8 @@ class ReservationFailure implements Exception {
 }
 
 abstract class SupabaseReservationGateway {
+  Future<Map<String, dynamic>> getDeal(String dealId);
+
   Future<List<Map<String, dynamic>>> getParticipants(String dealId);
 
   Future<Map<String, dynamic>> reserveSlot(String dealId);
@@ -73,6 +88,16 @@ class PostgrestSupabaseReservationGateway
   PostgrestSupabaseReservationGateway(this._client);
 
   final SupabaseClient _client;
+
+  @override
+  Future<Map<String, dynamic>> getDeal(String dealId) async {
+    final row = await _client
+        .from('deal_feed')
+        .select()
+        .eq('id', dealId)
+        .single();
+    return Map<String, dynamic>.from(row);
+  }
 
   /// Both mutations go through an RPC rather than a table write: the
   /// reservation and the slot count have to move together, in one transaction,
@@ -151,11 +176,99 @@ class PostgrestSupabaseReservationGateway
   }
 }
 
-class SupabaseReservationRepository implements ReservationRepository {
-  SupabaseReservationRepository({required SupabaseReservationGateway gateway})
-    : _gateway = gateway;
+abstract class ReservationInvalidationSource {
+  Stream<void> watchDeal(String dealId);
+}
+
+class SupabaseReservationInvalidationSource
+    implements ReservationInvalidationSource {
+  SupabaseReservationInvalidationSource(this._client);
+
+  final SupabaseClient _client;
+
+  @override
+  Stream<void> watchDeal(String dealId) {
+    late final RealtimeChannel channel;
+    final controller = StreamController<void>();
+
+    void invalidate(PostgresChangePayload _) {
+      if (!controller.isClosed) controller.add(null);
+    }
+
+    controller.onListen = () {
+      channel = _client
+          .channel(
+            'deal-details:$dealId:${DateTime.now().microsecondsSinceEpoch}',
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'deals',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'id',
+              value: dealId,
+            ),
+            callback: invalidate,
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'deal_reservations',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'deal_id',
+              value: dealId,
+            ),
+            callback: invalidate,
+          )
+          .subscribe((status, error) {
+            if (controller.isClosed) return;
+            if (status == RealtimeSubscribeStatus.channelError ||
+                status == RealtimeSubscribeStatus.timedOut) {
+              controller.addError(
+                error ?? const RealtimeReservationSubscriptionFailure(),
+              );
+            }
+          });
+    };
+
+    controller.onCancel = () async {
+      await channel.unsubscribe();
+    };
+    return controller.stream;
+  }
+}
+
+class RealtimeReservationSubscriptionFailure implements Exception {
+  const RealtimeReservationSubscriptionFailure();
+
+  @override
+  String toString() => 'Realtime reservation subscription failed.';
+}
+
+class SupabaseReservationRepository
+    implements ReservationRepository, RealtimeReservationRepository {
+  SupabaseReservationRepository({
+    required SupabaseReservationGateway gateway,
+    ReservationInvalidationSource? invalidationSource,
+  }) : _gateway = gateway,
+       _invalidationSource = invalidationSource;
 
   final SupabaseReservationGateway _gateway;
+  final ReservationInvalidationSource? _invalidationSource;
+
+  @override
+  Stream<DealDetailsSnapshot> watchDealDetails(Deal deal) async* {
+    yield await _getSnapshot(deal);
+
+    final invalidationSource = _invalidationSource;
+    if (invalidationSource == null) return;
+
+    await for (final _ in invalidationSource.watchDeal(deal.id)) {
+      yield await _getSnapshot(deal);
+    }
+  }
 
   @override
   Future<Deal> reserveSlot(String dealId) async {
@@ -236,6 +349,19 @@ class SupabaseReservationRepository implements ReservationRepository {
     return participants;
   }
 
+  Future<DealDetailsSnapshot> _getSnapshot(Deal fallbackDeal) async {
+    Deal deal;
+    try {
+      deal = dealFromRow(await _gateway.getDeal(fallbackDeal.id));
+    } catch (_) {
+      deal = fallbackDeal;
+    }
+    return DealDetailsSnapshot(
+      deal: deal,
+      participants: await getParticipants(fallbackDeal.id),
+    );
+  }
+
   Reservation _reservationFromRow(Map<String, dynamic> row) {
     final paidAt = row['paid_at'] as String?;
     final collectedAt = row['collected_at'] as String?;
@@ -280,7 +406,8 @@ class SupabaseReservationRepository implements ReservationRepository {
 
 /// In-memory stand-in that obeys the same rules as the database, so ViewModel
 /// tests pass or fail for the same reasons production would.
-class MockReservationRepository implements ReservationRepository {
+class MockReservationRepository
+    implements ReservationRepository, RealtimeReservationRepository {
   MockReservationRepository({required Deal deal, required this.currentUserId})
     : _deal = deal,
       _holders = {
@@ -298,6 +425,14 @@ class MockReservationRepository implements ReservationRepository {
   final String currentUserId;
 
   Deal get deal => _deal;
+
+  @override
+  Stream<DealDetailsSnapshot> watchDealDetails(Deal deal) async* {
+    yield DealDetailsSnapshot(
+      deal: _deal,
+      participants: await getParticipants(deal.id),
+    );
+  }
 
   /// Test seam: stand in for another student. reserveSlot() always acts as
   /// currentUserId, and a deal with three students in it cannot be built from

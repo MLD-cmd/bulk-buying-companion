@@ -410,6 +410,9 @@ class _StubGateway implements SupabaseReservationGateway {
   final List<Map<String, dynamic>> participantRows;
 
   @override
+  Future<Map<String, dynamic>> getDeal(String dealId) async => dealRow;
+
+  @override
   Future<Map<String, dynamic>> reserveSlot(String dealId) async => dealRow;
 
   @override
@@ -445,6 +448,9 @@ class _FailingGateway implements SupabaseReservationGateway {
   _FailingGateway(this.error);
 
   final PostgrestException error;
+
+  @override
+  Future<Map<String, dynamic>> getDeal(String dealId) async => throw error;
 
   @override
   Future<Map<String, dynamic>> reserveSlot(String dealId) async => throw error;

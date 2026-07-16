@@ -145,6 +145,38 @@ void main() {
     ]);
   });
 
+  test('updates deal history when the hub deal stream changes', () async {
+    final dealRepository = _LiveDealHistoryRepository([
+      _deal(id: 'hosted-active', createdBy: 'user-1', title: 'Hosted Rice'),
+    ]);
+    final reservationRepository = _ReservationHistoryRepository({
+      'hosted-active': [_reservation('hosted-active', 'user-1', isHost: true)],
+      'joined-active': [
+        _reservation('joined-active', 'host-2', isHost: true),
+        _reservation('joined-active', 'user-1'),
+      ],
+    });
+    final viewModel = ProfileViewModel(
+      authRepository: _ProfileAuthRepository(),
+      hubRepository: _SingleHubRepository(),
+      dealRepository: dealRepository,
+      reservationRepository: reservationRepository,
+    );
+    await pumpEventQueue();
+
+    expect(viewModel.hostedDeals.map((deal) => deal.title), ['Hosted Rice']);
+    expect(viewModel.joinedDeals, isEmpty);
+
+    dealRepository.emit([
+      _deal(id: 'hosted-active', createdBy: 'user-1', title: 'Hosted Rice'),
+      _deal(id: 'joined-active', createdBy: 'host-2', title: 'Joined Water'),
+    ]);
+    await pumpEventQueue();
+
+    expect(viewModel.hostedDeals.map((deal) => deal.title), ['Hosted Rice']);
+    expect(viewModel.joinedDeals.map((deal) => deal.title), ['Joined Water']);
+  });
+
   test('saves a changed display name through the auth repository', () async {
     final authRepository = _ProfileAuthRepository();
     final viewModel = ProfileViewModel(
@@ -325,6 +357,32 @@ class _DealHistoryRepository implements DealRepository {
   @override
   Stream<List<Deal>> watchDeals(String hubId) async* {
     yield await getDeals(hubId);
+  }
+}
+
+class _LiveDealHistoryRepository implements DealRepository {
+  _LiveDealHistoryRepository(this.deals);
+
+  List<Deal> deals;
+  final _controller = StreamController<List<Deal>>();
+
+  void emit(List<Deal> value) {
+    deals = value;
+    _controller.add(value);
+  }
+
+  @override
+  Future<Deal> createDeal(DealDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<Deal>> getDeals(String hubId) async => deals;
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield deals;
+    yield* _controller.stream;
   }
 }
 

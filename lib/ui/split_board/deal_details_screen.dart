@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/reservation_repository.dart';
+import '../../data/repositories/report_repository.dart';
 import '../../models/deal.dart';
 import '../../models/reservation.dart';
 import '../shared/app_banner.dart';
@@ -49,7 +50,17 @@ class DealDetailsScreen extends StatelessWidget {
             if (!didPop) Navigator.of(context).pop(viewModel.deal);
           },
           child: Scaffold(
-            appBar: AppBar(title: const Text('Deal details')),
+            appBar: AppBar(
+              title: const Text('Deal details'),
+              actions: [
+                IconButton(
+                  key: const Key('detail-report-button'),
+                  tooltip: 'Report deal or user',
+                  onPressed: () => _showReportSheet(context, viewModel),
+                  icon: const Icon(Icons.flag_outlined),
+                ),
+              ],
+            ),
             body: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -209,6 +220,36 @@ class DealDetailsScreen extends StatelessWidget {
 
     if (confirmed == true) await viewModel.cancelDeal();
   }
+
+  Future<void> _showReportSheet(
+    BuildContext context,
+    DealDetailsViewModel viewModel,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final repository = context.read<ReportRepository>();
+    final deal = viewModel.deal;
+
+    final submitted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _ReportSheet(
+        deal: deal,
+        currentUserId: viewModel.currentUserId,
+        repository: repository,
+      ),
+    );
+
+    if (submitted == true) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Report submitted. Thanks for helping keep this hub safe.',
+          ),
+        ),
+      );
+    }
+  }
 }
 
 class _LifecycleActions extends StatelessWidget {
@@ -287,6 +328,175 @@ class _LifecycleActions extends StatelessWidget {
     if (viewModel.isFull) return 'No slots left';
     if (viewModel.deadlinePassed) return 'Deadline passed';
     return 'Reserve a slot';
+  }
+}
+
+class _ReportSheet extends StatefulWidget {
+  const _ReportSheet({
+    required this.deal,
+    required this.currentUserId,
+    required this.repository,
+  });
+
+  final Deal deal;
+  final String? currentUserId;
+  final ReportRepository repository;
+
+  @override
+  State<_ReportSheet> createState() => _ReportSheetState();
+}
+
+class _ReportSheetState extends State<_ReportSheet> {
+  final _controller = TextEditingController();
+  var _targetType = ReportTargetType.deal;
+  ReportReason? _reason;
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final canReportUser =
+        widget.deal.createdBy != null &&
+        widget.deal.createdBy != widget.currentUserId;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Report deal or user', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 6),
+                Text(
+                  'Reports help moderators review suspicious deals, inappropriate content, or problematic users.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'What are you reporting?',
+                  style: theme.textTheme.titleSmall,
+                ),
+                RadioListTile<ReportTargetType>(
+                  contentPadding: EdgeInsets.zero,
+                  value: ReportTargetType.deal,
+                  groupValue: _targetType,
+                  onChanged: _isSubmitting ? null : _setTargetType,
+                  title: const Text('Deal'),
+                ),
+                if (canReportUser)
+                  RadioListTile<ReportTargetType>(
+                    contentPadding: EdgeInsets.zero,
+                    value: ReportTargetType.user,
+                    groupValue: _targetType,
+                    onChanged: _isSubmitting ? null : _setTargetType,
+                    title: const Text('Organiser'),
+                  ),
+                const SizedBox(height: 10),
+                Text('Reason', style: theme.textTheme.titleSmall),
+                for (final item in ReportReason.values)
+                  RadioListTile<ReportReason>(
+                    contentPadding: EdgeInsets.zero,
+                    value: item,
+                    groupValue: _reason,
+                    onChanged: _isSubmitting ? null : _setReason,
+                    title: Text(item.label),
+                  ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const Key('report-explanation-field'),
+                  controller: _controller,
+                  minLines: 3,
+                  maxLines: 5,
+                  enabled: !_isSubmitting,
+                  decoration: const InputDecoration(
+                    labelText: 'Optional explanation',
+                    alignLabelWithHint: true,
+                    prefixIcon: Icon(Icons.notes_outlined),
+                  ),
+                ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  AppBanner.error(message: _errorMessage!),
+                ],
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  key: const Key('submit-report-button'),
+                  onPressed: _reason == null || _isSubmitting ? null : _submit,
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.flag_outlined),
+                  label: Text(
+                    _isSubmitting ? 'Submitting...' : 'Submit report',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setTargetType(ReportTargetType? value) {
+    if (value == null) return;
+    setState(() => _targetType = value);
+  }
+
+  void _setReason(ReportReason? value) {
+    setState(() => _reason = value);
+  }
+
+  Future<void> _submit() async {
+    final selectedReason = _reason;
+    if (selectedReason == null || _isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await widget.repository.submitReport(
+        ReportDraft(
+          dealId: widget.deal.id,
+          targetType: _targetType,
+          reportedUserId: _targetType == ReportTargetType.user
+              ? widget.deal.createdBy
+              : null,
+          reason: selectedReason,
+          explanation: _controller.text,
+        ),
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on ReportFailure catch (failure) {
+      setState(() {
+        _errorMessage = failure.message;
+        _isSubmitting = false;
+      });
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Could not submit the report. Please try again.';
+        _isSubmitting = false;
+      });
+    }
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/hub.dart';
@@ -15,6 +17,17 @@ abstract class HubRepository {
   Future<void> leaveHub({required String userId});
 
   Future<String?> getCurrentHubId(String userId);
+}
+
+class HubDirectorySnapshot {
+  const HubDirectorySnapshot({required this.hubs, required this.joinedHubId});
+
+  final List<Hub> hubs;
+  final String? joinedHubId;
+}
+
+abstract class RealtimeHubRepository {
+  Stream<HubDirectorySnapshot> watchHubDirectory(String userId);
 }
 
 /// Raised when a hub cannot be registered. The message is user-facing.
@@ -130,6 +143,64 @@ abstract class SupabaseHubGateway {
   Future<String?> getCurrentHubId(String userId);
 }
 
+abstract class HubInvalidationSource {
+  Stream<void> watchHubDirectory();
+}
+
+class SupabaseHubInvalidationSource implements HubInvalidationSource {
+  SupabaseHubInvalidationSource(this._client);
+
+  final SupabaseClient _client;
+
+  @override
+  Stream<void> watchHubDirectory() {
+    late final RealtimeChannel channel;
+    final controller = StreamController<void>();
+
+    void invalidate(PostgresChangePayload _) {
+      if (!controller.isClosed) controller.add(null);
+    }
+
+    controller.onListen = () {
+      channel = _client
+          .channel('hubs:${DateTime.now().microsecondsSinceEpoch}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'hubs',
+            callback: invalidate,
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'hub_memberships',
+            callback: invalidate,
+          )
+          .subscribe((status, error) {
+            if (controller.isClosed) return;
+            if (status == RealtimeSubscribeStatus.channelError ||
+                status == RealtimeSubscribeStatus.timedOut) {
+              controller.addError(
+                error ?? const RealtimeHubSubscriptionFailure(),
+              );
+            }
+          });
+    };
+
+    controller.onCancel = () async {
+      await channel.unsubscribe();
+    };
+    return controller.stream;
+  }
+}
+
+class RealtimeHubSubscriptionFailure implements Exception {
+  const RealtimeHubSubscriptionFailure();
+
+  @override
+  String toString() => 'Realtime hub subscription failed.';
+}
+
 class PostgrestSupabaseHubGateway implements SupabaseHubGateway {
   PostgrestSupabaseHubGateway(this._client);
 
@@ -174,11 +245,27 @@ class PostgrestSupabaseHubGateway implements SupabaseHubGateway {
   }
 }
 
-class SupabaseHubRepository implements HubRepository {
-  SupabaseHubRepository({required SupabaseHubGateway gateway})
-    : _gateway = gateway;
+class SupabaseHubRepository implements HubRepository, RealtimeHubRepository {
+  SupabaseHubRepository({
+    required SupabaseHubGateway gateway,
+    HubInvalidationSource? invalidationSource,
+  }) : _gateway = gateway,
+       _invalidationSource = invalidationSource;
 
   final SupabaseHubGateway _gateway;
+  final HubInvalidationSource? _invalidationSource;
+
+  @override
+  Stream<HubDirectorySnapshot> watchHubDirectory(String userId) async* {
+    yield await _snapshot(userId);
+
+    final invalidationSource = _invalidationSource;
+    if (invalidationSource == null) return;
+
+    await for (final _ in invalidationSource.watchHubDirectory()) {
+      yield await _snapshot(userId);
+    }
+  }
 
   @override
   Future<List<Hub>> getHubs() async {
@@ -217,6 +304,14 @@ class SupabaseHubRepository implements HubRepository {
   @override
   Future<String?> getCurrentHubId(String userId) {
     return _gateway.getCurrentHubId(userId);
+  }
+
+  Future<HubDirectorySnapshot> _snapshot(String userId) async {
+    final results = await Future.wait([getHubs(), getCurrentHubId(userId)]);
+    return HubDirectorySnapshot(
+      hubs: results[0] as List<Hub>,
+      joinedHubId: results[1] as String?,
+    );
   }
 
   String _messageFor(PostgrestException error) {

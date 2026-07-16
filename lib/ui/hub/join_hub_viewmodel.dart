@@ -25,13 +25,14 @@ class JoinHubViewModel extends ChangeNotifier {
        _locationService = locationService {
     _authSub = _authRepository.authStateChanges.listen(_onAuthChanged);
     final currentUser = _authRepository.currentUser;
-    if (currentUser != null) _load(currentUser.uid);
+    if (currentUser != null) _startHubUpdates(currentUser.uid);
   }
 
   final AuthRepository _authRepository;
   final HubRepository _hubRepository;
   final LocationService _locationService;
   late final StreamSubscription<AppUser?> _authSub;
+  StreamSubscription<HubDirectorySnapshot>? _hubSub;
 
   List<Hub> _hubs = [];
   String _searchQuery = '';
@@ -99,7 +100,25 @@ class JoinHubViewModel extends ChangeNotifier {
 
   void _onAuthChanged(AppUser? user) {
     if (user == null) return;
-    _load(user.uid);
+    _startHubUpdates(user.uid);
+  }
+
+  void _startHubUpdates(String userId) {
+    final realtimeRepository = _hubRepository is RealtimeHubRepository
+        ? _hubRepository as RealtimeHubRepository
+        : null;
+
+    if (realtimeRepository == null) {
+      _load(userId);
+      return;
+    }
+
+    _isLoading = true;
+    notifyListeners();
+    _hubSub?.cancel();
+    _hubSub = realtimeRepository
+        .watchHubDirectory(userId)
+        .listen(_setHubSnapshot, onError: (_) => _clearHubSnapshot());
   }
 
   Future<void> _load(String userId) async {
@@ -124,6 +143,24 @@ class JoinHubViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _setHubSnapshot(HubDirectorySnapshot snapshot) async {
+    _hubs = snapshot.hubs;
+    _joinedHubId = snapshot.joinedHubId;
+    _pendingSwitchId = null;
+    await _replaceDistancesWithCurrentLocation();
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  void _clearHubSnapshot() {
+    _hubs = const [];
+    _joinedHubId = null;
+    _pendingSwitchId = null;
+    _locationFailureMessage = null;
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<void> _replaceDistancesWithCurrentLocation() async {
@@ -261,6 +298,7 @@ class JoinHubViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _authSub.cancel();
+    _hubSub?.cancel();
     super.dispose();
   }
 }

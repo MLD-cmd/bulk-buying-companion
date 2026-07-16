@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/auth_repository.dart';
@@ -25,6 +27,7 @@ class ProfileViewModel extends ChangeNotifier {
   final HubRepository _hubRepository;
   final DealRepository _dealRepository;
   final ReservationRepository _reservationRepository;
+  StreamSubscription<List<Deal>>? _dealHistorySub;
 
   AppUser? _user;
   Hub? _currentHub;
@@ -113,7 +116,7 @@ class ProfileViewModel extends ChangeNotifier {
               break;
             }
           }
-          await _loadDealHistory(hubId: hubId, userId: user.uid);
+          _startDealHistoryUpdates(hubId: hubId, userId: user.uid);
         }
       }
     } catch (_) {
@@ -128,11 +131,23 @@ class ProfileViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadDealHistory({
+  void _startDealHistoryUpdates({
     required String hubId,
     required String userId,
+  }) {
+    _dealHistorySub?.cancel();
+    _dealHistorySub = _dealRepository
+        .watchDeals(hubId)
+        .listen(
+          (deals) => _setDealHistory(deals: deals, userId: userId),
+          onError: (_) => _setDealHistoryError(),
+        );
+  }
+
+  Future<void> _setDealHistory({
+    required List<Deal> deals,
+    required String userId,
   }) async {
-    final deals = await _dealRepository.getDeals(hubId);
     final hosted = <Deal>[];
     final joined = <Deal>[];
     final completed = <Deal>[];
@@ -159,6 +174,15 @@ class ProfileViewModel extends ChangeNotifier {
     _hostedDeals = List.unmodifiable(hosted);
     _joinedDeals = List.unmodifiable(joined);
     _completedDeals = List.unmodifiable(completed);
+    _notifyIfAlive();
+  }
+
+  void _setDealHistoryError() {
+    _hostedDeals = const [];
+    _joinedDeals = const [];
+    _completedDeals = const [];
+    _errorMessage = 'Could not load profile. Please try again.';
+    _notifyIfAlive();
   }
 
   void _notifyIfAlive() {
@@ -168,6 +192,7 @@ class ProfileViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    _dealHistorySub?.cancel();
     super.dispose();
   }
 }

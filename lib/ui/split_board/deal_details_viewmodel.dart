@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/reservation_repository.dart';
@@ -13,7 +15,17 @@ class DealDetailsViewModel extends ChangeNotifier {
     required this.currentUserId,
   }) : _reservationRepository = reservationRepository,
        _deal = deal {
-    _loadParticipants();
+    final realtimeRepository =
+        reservationRepository is RealtimeReservationRepository
+        ? reservationRepository as RealtimeReservationRepository
+        : null;
+    if (realtimeRepository == null) {
+      _loadParticipants();
+    } else {
+      _subscription = realtimeRepository
+          .watchDealDetails(deal)
+          .listen(_setSnapshot, onError: (_) => _setSnapshotError());
+    }
   }
 
   final ReservationRepository _reservationRepository;
@@ -24,6 +36,7 @@ class DealDetailsViewModel extends ChangeNotifier {
   bool _isLoading = true;
   bool _isUpdating = false;
   String? _errorMessage;
+  StreamSubscription<DealDetailsSnapshot>? _subscription;
 
   Deal get deal => _deal;
   List<Reservation> get participants => _participants;
@@ -144,6 +157,12 @@ class DealDetailsViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
   /// A second tap landing before the first call resolves would claim against a
   /// stale slot count. The button disables too; this is the backstop.
   Future<void> _mutate(Future<Deal> Function() action) async {
@@ -175,5 +194,17 @@ class DealDetailsViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void _setSnapshot(DealDetailsSnapshot snapshot) {
+    _deal = snapshot.deal;
+    _participants = snapshot.participants;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  void _setSnapshotError() {
+    _isLoading = false;
+    notifyListeners();
   }
 }

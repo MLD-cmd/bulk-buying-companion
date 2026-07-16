@@ -331,6 +331,50 @@ void main() {
     expect(viewModel.isLoading, isFalse);
     expect(viewModel.filteredHubs, isEmpty);
   });
+
+  test(
+    'updates hub member counts from the realtime directory stream',
+    () async {
+      final hubRepository = _LiveHubRepository(
+        snapshot: const HubDirectorySnapshot(
+          hubs: _unsortedDirectory,
+          joinedHubId: null,
+        ),
+      );
+      final viewModel = JoinHubViewModel(
+        authRepository: _SignedInAuthRepository(),
+        hubRepository: hubRepository,
+        locationService: _FakeLocationService(
+          result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(
+        viewModel.filteredHubs
+            .firstWhere((hub) => hub.id == 'near')
+            .memberCount,
+        3,
+      );
+
+      hubRepository.emit(
+        HubDirectorySnapshot(
+          hubs: _unsortedDirectory
+              .map(
+                (hub) => hub.id == 'near'
+                    ? hub.copyWith(memberCount: hub.memberCount + 1)
+                    : hub,
+              )
+              .toList(),
+          joinedHubId: 'near',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(viewModel.joinedHubId, 'near');
+      expect(viewModel.joinedHub?.memberCount, 4);
+    },
+  );
 }
 
 /// Deliberately not in distance order, so a passing sort test cannot be the
@@ -509,6 +553,41 @@ class _HubRepositoryWithDirectory implements HubRepository {
 
   @override
   Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
+
+class _LiveHubRepository implements HubRepository, RealtimeHubRepository {
+  _LiveHubRepository({required this.snapshot});
+
+  HubDirectorySnapshot snapshot;
+  final _controller = StreamController<HubDirectorySnapshot>();
+
+  void emit(HubDirectorySnapshot value) {
+    snapshot = value;
+    _controller.add(value);
+  }
+
+  @override
+  Stream<HubDirectorySnapshot> watchHubDirectory(String userId) async* {
+    yield snapshot;
+    yield* _controller.stream;
+  }
+
+  @override
+  Future<List<Hub>> getHubs() async => snapshot.hubs;
+
+  @override
+  Future<Hub> createHub(HubDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => snapshot.joinedHubId;
 
   @override
   Future<void> joinHub({required String userId, required String hubId}) async {}
