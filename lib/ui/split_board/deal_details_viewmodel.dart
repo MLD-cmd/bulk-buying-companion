@@ -21,13 +21,21 @@ class DealDetailsViewModel extends ChangeNotifier {
 
   Deal _deal;
   List<Reservation> _participants = const [];
-  bool _isLoading = true;
+  bool _isLoadingParticipants = true;
+  String? _participantErrorMessage;
+  int _participantGeneration = 0;
   bool _isUpdating = false;
   String? _errorMessage;
+  int _mutationGeneration = 0;
+  int _dealGeneration = 0;
+  bool _isDisposed = false;
 
   Deal get deal => _deal;
   List<Reservation> get participants => _participants;
-  bool get isLoading => _isLoading;
+  bool get isLoadingParticipants => _isLoadingParticipants;
+  String? get participantErrorMessage => _participantErrorMessage;
+  bool get hasReliableParticipantState =>
+      !_isLoadingParticipants && _participantErrorMessage == null;
   bool get isUpdating => _isUpdating;
   String? get errorMessage => _errorMessage;
 
@@ -59,13 +67,19 @@ class DealDetailsViewModel extends ChangeNotifier {
   /// money against a count that must now be final; and a student who has paid
   /// would be leaving the host holding money they owe back.
   bool get canCancel =>
+      hasReliableParticipantState &&
       holdsSlot &&
       !isHost &&
       !deadlinePassed &&
       !isClosed &&
       !currentUserHasPaid;
 
-  bool get canReserve => !holdsSlot && !isFull && !deadlinePassed && !isClosed;
+  bool get canReserve =>
+      hasReliableParticipantState &&
+      !holdsSlot &&
+      !isFull &&
+      !deadlinePassed &&
+      !isClosed;
 
   /// The host's levers. The screen offers "I've bought it" from Full onward —
   /// the normal path — though the database does not insist on it.
@@ -121,42 +135,101 @@ class DealDetailsViewModel extends ChangeNotifier {
   Future<void> cancelDeal() =>
       _mutate(() => _reservationRepository.cancelDeal(_deal.id));
 
+  Future<void> retryParticipants() => _loadParticipants();
+
   /// Test seam: adopt a deal changed outside this ViewModel.
   void refreshDeal(Deal deal) {
+    if (_isDisposed) return;
     _deal = deal;
-    notifyListeners();
+    _dealGeneration++;
+    _notifyListeners();
   }
 
   /// A second tap landing before the first call resolves would claim against a
   /// stale slot count. The button disables too; this is the backstop.
   Future<void> _mutate(Future<Deal> Function() action) async {
-    if (_isUpdating) return;
+    if (_isUpdating || _isDisposed) return;
 
+    final mutationGeneration = ++_mutationGeneration;
+    final dealGeneration = _dealGeneration;
     _isUpdating = true;
     _errorMessage = null;
-    notifyListeners();
+    _notifyListeners();
 
     try {
-      _deal = await action();
-      _participants = await _reservationRepository.getParticipants(_deal.id);
-    } on ReservationFailure catch (failure) {
-      _errorMessage = failure.message;
-    } catch (_) {
-      _errorMessage = 'Could not update your slot. Please try again.';
+      late final Deal updatedDeal;
+      try {
+        updatedDeal = await action();
+      } on ReservationFailure catch (failure) {
+        if (_canCommitMutation(mutationGeneration, dealGeneration)) {
+          _errorMessage = failure.message;
+        }
+        return;
+      } catch (_) {
+        if (_canCommitMutation(mutationGeneration, dealGeneration)) {
+          _errorMessage = 'Could not update your slot. Please try again.';
+        }
+        return;
+      }
+
+      if (!_canCommitMutation(mutationGeneration, dealGeneration)) return;
+
+      _deal = updatedDeal;
+      _dealGeneration++;
+      await _loadParticipants();
     } finally {
-      _isUpdating = false;
-      notifyListeners();
+      if (!_isDisposed && mutationGeneration == _mutationGeneration) {
+        _isUpdating = false;
+        _notifyListeners();
+      }
     }
   }
 
   Future<void> _loadParticipants() async {
+    if (_isDisposed) return;
+
+    final generation = ++_participantGeneration;
+    _isLoadingParticipants = true;
+    _participantErrorMessage = null;
+    _notifyListeners();
+
     try {
-      _participants = await _reservationRepository.getParticipants(_deal.id);
+      final participants = await _reservationRepository.getParticipants(
+        _deal.id,
+      );
+      if (!_canCommitParticipants(generation)) return;
+
+      _participants = participants;
+      _isLoadingParticipants = false;
+      _participantErrorMessage = null;
     } catch (_) {
-      _participants = const [];
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (!_canCommitParticipants(generation)) return;
+
+      _isLoadingParticipants = false;
+      _participantErrorMessage =
+          'Couldn’t load who is in this deal. Try again before reserving a slot.';
     }
+
+    _notifyListeners();
+  }
+
+  bool _canCommitParticipants(int generation) =>
+      !_isDisposed && generation == _participantGeneration;
+
+  bool _canCommitMutation(int mutationGeneration, int dealGeneration) =>
+      !_isDisposed &&
+      mutationGeneration == _mutationGeneration &&
+      dealGeneration == _dealGeneration;
+
+  void _notifyListeners() {
+    if (!_isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _participantGeneration++;
+    _mutationGeneration++;
+    super.dispose();
   }
 }

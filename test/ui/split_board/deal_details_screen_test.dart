@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
+import 'package:bulk_buying_companion/models/reservation.dart';
 import 'package:bulk_buying_companion/ui/split_board/deal_details_screen.dart';
 import 'package:bulk_buying_companion/ui/split_board/deal_details_viewmodel.dart';
 import 'package:flutter/material.dart';
@@ -67,6 +70,42 @@ void main() {
     await tester.pump();
   }
 
+  Future<DealDetailsViewModel> pumpControlled(
+    WidgetTester tester, {
+    required _ScreenReservationRepository repository,
+    required String currentUserId,
+    Size size = const Size(800, 2400),
+    double textScale = 1,
+  }) async {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: ChangeNotifierProvider(
+          create: (_) => DealDetailsViewModel(
+            deal: repository.deal,
+            currentUserId: currentUserId,
+            reservationRepository: repository,
+          ),
+          child: const DealDetailsScreen(),
+        ),
+      ),
+    );
+
+    return tester
+        .element(find.byType(DealDetailsScreen))
+        .read<DealDetailsViewModel>();
+  }
+
   Deal hostedDeal({required int availableSlots, required int totalSlots}) {
     return Deal(
       id: 'd',
@@ -84,6 +123,412 @@ void main() {
       paidCount: 1,
     );
   }
+
+  testWidgets('participants move through loading, error, empty, and list', (
+    tester,
+  ) async {
+    final repository = _ScreenReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'ana',
+    );
+    final viewModel = await pumpControlled(
+      tester,
+      repository: repository,
+      currentUserId: 'ana',
+    );
+
+    expect(find.text('Loading participants…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Nobody has claimed a slot yet.'), findsNothing);
+
+    repository.participantRequests.single.completeError(StateError('offline'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Couldn’t load who is in this deal. Try again before reserving a slot.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Nobody has claimed a slot yet.'), findsNothing);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pump();
+    expect(find.text('Loading participants…'), findsOneWidget);
+    expect(find.text('Nobody has claimed a slot yet.'), findsNothing);
+
+    repository.participantRequests.last.complete(const []);
+    await tester.pump();
+    expect(find.text('Nobody has claimed a slot yet.'), findsOneWidget);
+
+    final reload = viewModel.retryParticipants();
+    await tester.pump();
+    repository.participantRequests.last.complete([
+      _screenReservation('ana', name: 'Ana Reyes'),
+    ]);
+    await reload;
+    await tester.pump();
+
+    expect(find.text('Ana Reyes'), findsOneWidget);
+    expect(find.text('Nobody has claimed a slot yet.'), findsNothing);
+  });
+
+  testWidgets('student action labels participant reliability', (tester) async {
+    final repository = _ScreenReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'ana',
+    );
+    await pumpControlled(tester, repository: repository, currentUserId: 'ana');
+
+    expect(find.text('Checking availability…'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('detail-reserve-button')))
+          .onPressed,
+      isNull,
+    );
+
+    repository.participantRequests.single.completeError(StateError('offline'));
+    await tester.pump();
+
+    expect(find.text('Participants unavailable'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('detail-reserve-button')))
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('Reserve a slot'), findsNothing);
+    expect(find.text('Cancel my slot'), findsNothing);
+  });
+
+  testWidgets(
+    'participant retry moves from failure through loading to a list',
+    (tester) async {
+      final repository = _ScreenReservationRepository(
+        deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+        currentUserId: 'ana',
+      );
+      await pumpControlled(
+        tester,
+        repository: repository,
+        currentUserId: 'ana',
+      );
+      repository.participantRequests.single.completeError(
+        StateError('offline'),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      expect(find.text('Loading participants…'), findsOneWidget);
+      expect(find.text('Nobody has claimed a slot yet.'), findsNothing);
+
+      repository.participantRequests.last.complete([
+        _screenReservation('ana', name: 'Ana Reyes'),
+      ]);
+      await tester.pump();
+
+      expect(find.text('Ana Reyes'), findsOneWidget);
+      expect(find.text('Cancel my slot'), findsOneWidget);
+      expect(find.text('Nobody has claimed a slot yet.'), findsNothing);
+    },
+  );
+
+  testWidgets('reserve success keeps the deal change when refresh fails', (
+    tester,
+  ) async {
+    final deal = hostedDeal(availableSlots: 3, totalSlots: 4);
+    final repository = _ScreenReservationRepository(
+      deal: deal,
+      currentUserId: 'ana',
+    );
+    await pumpControlled(tester, repository: repository, currentUserId: 'ana');
+    repository.participantRequests.single.complete(const []);
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('detail-reserve-button')));
+    repository.reserveRequest.complete(deal.copyWith(availableSlots: 2));
+    await tester.pump();
+    repository.participantRequests.last.completeError(StateError('offline'));
+    await tester.pump();
+
+    expect(find.text('2 of 4 slots open'), findsOneWidget);
+    expect(find.byKey(const Key('detail-reservation-error')), findsNothing);
+    expect(
+      find.text(
+        'Couldn’t load who is in this deal. Try again before reserving a slot.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Participants unavailable'), findsOneWidget);
+  });
+
+  testWidgets('cancel own slot requires one guarded confirmation', (
+    tester,
+  ) async {
+    final deal = hostedDeal(availableSlots: 3, totalSlots: 4);
+    final repository = _ScreenReservationRepository(
+      deal: deal,
+      currentUserId: 'ana',
+    );
+    await pumpControlled(tester, repository: repository, currentUserId: 'ana');
+    repository.participantRequests.single.complete([
+      _screenReservation('ana', name: 'Ana Reyes'),
+    ]);
+    await tester.pump();
+
+    final cancel = find.byKey(const Key('detail-reserve-button'));
+    final cancelButton = tester.widget<OutlinedButton>(cancel);
+    cancelButton.onPressed!();
+    cancelButton.onPressed!();
+    await tester.pump();
+
+    expect(find.text('Cancel your slot?'), findsOneWidget);
+    expect(
+      find.text('Another hub member may take this slot after you cancel it.'),
+      findsOneWidget,
+    );
+    expect(find.text('Keep slot'), findsOneWidget);
+    expect(find.text('Cancel slot'), findsOneWidget);
+    expect(repository.cancelCalls, 0);
+
+    await tester.tap(find.text('Keep slot'));
+    await tester.pumpAndSettle();
+    expect(repository.cancelCalls, 0);
+
+    await tester.tap(cancel);
+    await tester.pump();
+    await tester.tap(find.text('Cancel slot'));
+    await tester.pump();
+    expect(repository.cancelCalls, 1);
+  });
+
+  testWidgets(
+    'cancel confirmation cannot act after participant state changes',
+    (tester) async {
+      final repository = _ScreenReservationRepository(
+        deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+        currentUserId: 'ana',
+      );
+      final viewModel = await pumpControlled(
+        tester,
+        repository: repository,
+        currentUserId: 'ana',
+      );
+      repository.participantRequests.single.complete([
+        _screenReservation('ana', name: 'Ana Reyes'),
+      ]);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('detail-reserve-button')));
+      await tester.pump();
+      final reload = viewModel.retryParticipants();
+      await tester.tap(find.text('Cancel slot'));
+      await tester.pump();
+
+      expect(repository.cancelCalls, 0);
+      repository.participantRequests.last.complete(const []);
+      await reload;
+    },
+  );
+
+  testWidgets('mark purchased requires one guarded confirmation', (
+    tester,
+  ) async {
+    final deal = hostedDeal(availableSlots: 0, totalSlots: 2);
+    final repository = _ScreenReservationRepository(
+      deal: deal,
+      currentUserId: 'host',
+    );
+    await pumpControlled(tester, repository: repository, currentUserId: 'host');
+    repository.participantRequests.single.complete([
+      _screenReservation('host', name: 'Marco', isHost: true, paid: true),
+      _screenReservation('ana', name: 'Ana'),
+    ]);
+    await tester.pump();
+
+    final purchase = find.byKey(const Key('detail-mark-purchased-button'));
+    final purchaseButton = tester.widget<FilledButton>(purchase);
+    purchaseButton.onPressed!();
+    purchaseButton.onPressed!();
+    await tester.pump();
+
+    expect(find.text('Mark this deal as purchased?'), findsOneWidget);
+    expect(
+      find.text('Reservations will be locked after you confirm the purchase.'),
+      findsOneWidget,
+    );
+    expect(find.text('Not yet'), findsOneWidget);
+    expect(find.text('I’ve bought it'), findsOneWidget);
+    expect(repository.markPurchasedCalls, 0);
+
+    await tester.tap(find.text('Not yet'));
+    await tester.pumpAndSettle();
+    expect(repository.markPurchasedCalls, 0);
+
+    await tester.tap(purchase);
+    await tester.pump();
+    await tester.tap(find.text('I’ve bought it'));
+    await tester.pump();
+    expect(repository.markPurchasedCalls, 1);
+  });
+
+  testWidgets(
+    'help is accessible and preserves deal participant and scroll state',
+    (tester) async {
+      final repository = _ScreenReservationRepository(
+        deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+        currentUserId: 'ana',
+      );
+      final viewModel = await pumpControlled(
+        tester,
+        repository: repository,
+        currentUserId: 'ana',
+        size: const Size(800, 900),
+      );
+      repository.participantRequests.single.complete([
+        _screenReservation('ana', name: 'Ana Reyes'),
+      ]);
+      await tester.pump();
+
+      await tester.drag(find.byType(ListView).first, const Offset(0, -240));
+      await tester.pump();
+      final scrollable = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
+      final offset = scrollable.position.pixels;
+      final dealBefore = viewModel.deal;
+      final participantsBefore = viewModel.participants;
+
+      final help = find.byTooltip('How deal details work');
+      expect(help, findsOneWidget);
+      expect(tester.getSize(help).height, greaterThanOrEqualTo(48));
+      expect(
+        tester.getSemantics(help).label,
+        contains('How deal details work'),
+      );
+
+      await tester.tap(help);
+      await tester.pumpAndSettle();
+      expect(find.text('How deal details work'), findsOneWidget);
+      expect(find.text('Payment and your share'), findsOneWidget);
+      expect(find.text('Slots and pickup'), findsOneWidget);
+      expect(find.text('Reserve or manage'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Close'));
+      await tester.pumpAndSettle();
+      expect(viewModel.deal, same(dealBefore));
+      expect(viewModel.participants, same(participantsBefore));
+      expect(scrollable.position.pixels, offset);
+      expect(find.byType(DealDetailsScreen), findsOneWidget);
+    },
+  );
+
+  testWidgets('participant failure and help fit at 320dp and 200 percent', (
+    tester,
+  ) async {
+    final repository = _ScreenReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'ana',
+    );
+    await pumpControlled(
+      tester,
+      repository: repository,
+      currentUserId: 'ana',
+      size: const Size(320, 900),
+      textScale: 2,
+    );
+    repository.participantRequests.single.completeError(StateError('offline'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byTooltip('How deal details work'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Close'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('loading action and help fit in landscape', (tester) async {
+    final repository = _ScreenReservationRepository(
+      deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+      currentUserId: 'ana',
+    );
+    await pumpControlled(
+      tester,
+      repository: repository,
+      currentUserId: 'ana',
+      size: const Size(900, 320),
+    );
+
+    expect(find.text('Loading participants…'), findsOneWidget);
+    expect(find.text('Checking availability…'), findsOneWidget);
+    expect(find.byTooltip('How deal details work'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('removal during dialog or mutation avoids stale context work', (
+    tester,
+  ) async {
+    final deal = hostedDeal(availableSlots: 3, totalSlots: 4);
+    final repository = _ScreenReservationRepository(
+      deal: deal,
+      currentUserId: 'ana',
+    );
+    await pumpControlled(tester, repository: repository, currentUserId: 'ana');
+    repository.participantRequests.single.complete([
+      _screenReservation('ana', name: 'Ana'),
+    ]);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('detail-reserve-button')));
+    await tester.pump();
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpAndSettle();
+    expect(repository.cancelCalls, 0);
+    expect(tester.takeException(), isNull);
+
+    final helpRepository = _ScreenReservationRepository(
+      deal: deal,
+      currentUserId: 'ana',
+    );
+    await pumpControlled(
+      tester,
+      repository: helpRepository,
+      currentUserId: 'ana',
+    );
+    helpRepository.participantRequests.single.complete(const []);
+    await tester.pump();
+    tester
+        .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.help_outline))
+        .onPressed!();
+    await tester.pump();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    final mutationRepository = _ScreenReservationRepository(
+      deal: deal,
+      currentUserId: 'bea',
+    );
+    await pumpControlled(
+      tester,
+      repository: mutationRepository,
+      currentUserId: 'bea',
+    );
+    mutationRepository.participantRequests.single.complete(const []);
+    await tester.pump();
+    tester
+        .widget<FilledButton>(find.byKey(const Key('detail-reserve-button')))
+        .onPressed!();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    mutationRepository.reserveRequest.complete(
+      deal.copyWith(availableSlots: 2),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('shows the product, host, cost, slots and pickup details', (
     tester,
@@ -418,6 +863,80 @@ void main() {
       findsOneWidget,
     );
   });
+}
+
+Reservation _screenReservation(
+  String userId, {
+  required String name,
+  bool isHost = false,
+  bool paid = false,
+}) {
+  return Reservation(
+    dealId: 'd',
+    userId: userId,
+    studentName: name,
+    isHost: isHost,
+    reservedAt: DateTime(2026, 7, 14),
+    paidAt: paid ? DateTime(2026, 7, 14) : null,
+  );
+}
+
+class _ScreenReservationRepository implements ReservationRepository {
+  _ScreenReservationRepository({
+    required Deal deal,
+    required String currentUserId,
+  }) : _deal = deal,
+       _delegate = MockReservationRepository(
+         deal: deal,
+         currentUserId: currentUserId,
+       );
+
+  final Deal _deal;
+  final MockReservationRepository _delegate;
+  final List<Completer<List<Reservation>>> participantRequests = [];
+  final Completer<Deal> reserveRequest = Completer<Deal>();
+  final Completer<Deal> cancelRequest = Completer<Deal>();
+  final Completer<Deal> markPurchasedRequest = Completer<Deal>();
+  int cancelCalls = 0;
+  int markPurchasedCalls = 0;
+
+  Deal get deal => _deal;
+
+  @override
+  Future<List<Reservation>> getParticipants(String dealId) {
+    final request = Completer<List<Reservation>>();
+    participantRequests.add(request);
+    return request.future;
+  }
+
+  @override
+  Future<Deal> reserveSlot(String dealId) => reserveRequest.future;
+
+  @override
+  Future<Deal> cancelReservation(String dealId) {
+    cancelCalls++;
+    return cancelRequest.future;
+  }
+
+  @override
+  Future<Deal> markPurchased(String dealId) {
+    markPurchasedCalls++;
+    return markPurchasedRequest.future;
+  }
+
+  @override
+  Future<Deal> setPaid(String dealId, String userId, {required bool paid}) =>
+      _delegate.setPaid(dealId, userId, paid: paid);
+
+  @override
+  Future<Deal> setCollected(
+    String dealId,
+    String userId, {
+    required bool collected,
+  }) => _delegate.setCollected(dealId, userId, collected: collected);
+
+  @override
+  Future<Deal> cancelDeal(String dealId) => _delegate.cancelDeal(dealId);
 }
 
 final _deal = Deal(

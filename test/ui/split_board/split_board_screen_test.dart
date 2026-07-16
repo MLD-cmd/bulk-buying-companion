@@ -607,6 +607,9 @@ void main() {
     await tester.ensureVisible(purchasedButton);
     await tester.tap(purchasedButton);
     await tester.pumpAndSettle();
+    expect(find.text('Mark this deal as purchased?'), findsOneWidget);
+    await tester.tap(find.text('I’ve bought it'));
+    await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
 

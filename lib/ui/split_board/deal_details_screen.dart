@@ -6,16 +6,40 @@ import '../../data/repositories/reservation_repository.dart';
 import '../../models/deal.dart';
 import '../../models/reservation.dart';
 import '../shared/app_banner.dart';
-import '../shared/deal_action_bar.dart';
 import '../shared/app_theme.dart';
+import '../shared/deal_action_bar.dart';
+import '../shared/task_help_sheet.dart';
 import 'deal_details_viewmodel.dart';
 import 'widgets/deal_status_badge.dart';
 
 /// Everything a student needs before committing money to a bulk buy: what it
 /// is, who is organising it, what their share costs, whether there is room
 /// left, and where to collect it.
-class DealDetailsScreen extends StatelessWidget {
+class DealDetailsScreen extends StatefulWidget {
   const DealDetailsScreen({super.key});
+
+  static const _helpLabel = 'How deal details work';
+
+  static const _helpSteps = [
+    TaskHelpStep(
+      icon: Icons.payments_outlined,
+      title: 'Payment and your share',
+      body:
+          'See what one share costs, what you receive, and whether payment has been recorded.',
+    ),
+    TaskHelpStep(
+      icon: Icons.storefront_outlined,
+      title: 'Slots and pickup',
+      body:
+          'Check the open slots, deadline, pickup place, and who has joined the deal.',
+    ),
+    TaskHelpStep(
+      icon: Icons.how_to_reg_outlined,
+      title: 'Reserve or manage',
+      body:
+          'Students reserve or manage their slot. Hosts manage payment, pickup, and deal status.',
+    ),
+  ];
 
   /// Pops with the deal as it stands after any slot change, so the Split Board
   /// can show the new count instead of the one it pushed with.
@@ -31,6 +55,16 @@ class DealDetailsScreen extends StatelessWidget {
       ),
     );
   }
+
+  @override
+  State<DealDetailsScreen> createState() => _DealDetailsScreenState();
+}
+
+class _DealDetailsScreenState extends State<DealDetailsScreen> {
+  bool _helpSheetInFlight = false;
+  bool _cancelSlotDialogInFlight = false;
+  bool _purchaseDialogInFlight = false;
+  bool _cancelDealDialogInFlight = false;
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +83,27 @@ class DealDetailsScreen extends StatelessWidget {
             if (!didPop) Navigator.of(context).pop(viewModel.deal);
           },
           child: Scaffold(
-            appBar: AppBar(title: const Text('Deal details')),
+            appBar: AppBar(
+              title: const Text('Deal details'),
+              actions: [
+                Semantics(
+                  key: const Key('detail-help-button-semantics'),
+                  label: DealDetailsScreen._helpLabel,
+                  button: true,
+                  onTap: _showHelp,
+                  excludeSemantics: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.help_outline),
+                    tooltip: DealDetailsScreen._helpLabel,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size.square(48),
+                    ),
+                    onPressed: _showHelp,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
             body: SafeArea(
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
@@ -142,7 +196,9 @@ class DealDetailsScreen extends StatelessWidget {
                     key: const Key('detail-action-bar'),
                     child: _LifecycleActions(
                       viewModel: viewModel,
-                      onCancelDeal: () => _confirmCancel(context, viewModel),
+                      onCancelSlot: () => _confirmCancelSlot(viewModel),
+                      onMarkPurchased: () => _confirmPurchased(viewModel),
+                      onCancelDeal: () => _confirmCancelDeal(viewModel),
                     ),
                   )
                 : null,
@@ -152,63 +208,192 @@ class DealDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// The app never moves money. What it refuses to do is let the host cancel
-  /// while pretending nobody paid.
-  Future<void> _confirmCancel(
-    BuildContext context,
-    DealDetailsViewModel viewModel,
-  ) async {
-    final warning = viewModel.refundWarning;
+  Future<void> _showHelp() async {
+    if (_helpSheetInFlight || !mounted) return;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel this deal?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (warning != null) ...[
-              Text(
-                warning,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Cancelling does not refund them — you will have to hand it '
-                'back yourself.',
-              ),
-            ] else
-              const Text(
-                'Nobody has paid you yet, so there is nothing to hand back. '
-                'The deal will close and its slots will be released.',
-              ),
+    _helpSheetInFlight = true;
+    try {
+      await showTaskHelpSheet(
+        context,
+        title: DealDetailsScreen._helpLabel,
+        steps: DealDetailsScreen._helpSteps,
+      );
+    } finally {
+      _helpSheetInFlight = false;
+    }
+  }
+
+  Future<void> _confirmCancelSlot(DealDetailsViewModel viewModel) async {
+    if (_cancelSlotDialogInFlight ||
+        !mounted ||
+        viewModel.isUpdating ||
+        !viewModel.canCancel) {
+      return;
+    }
+
+    final expectedDeal = viewModel.deal;
+    final expectedParticipants = viewModel.participants;
+    _cancelSlotDialogInFlight = true;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Cancel your slot?'),
+          content: const Text(
+            'Another hub member may take this slot after you cancel it.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Keep slot'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Cancel slot'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep the deal'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Cancel the deal'),
-          ),
-        ],
-      ),
-    );
+      );
 
-    if (confirmed == true) await viewModel.cancelDeal();
+      if (!mounted ||
+          confirmed != true ||
+          viewModel.isUpdating ||
+          !viewModel.canCancel ||
+          !identical(viewModel.deal, expectedDeal) ||
+          !identical(viewModel.participants, expectedParticipants)) {
+        return;
+      }
+
+      await viewModel.cancel();
+    } finally {
+      _cancelSlotDialogInFlight = false;
+    }
+  }
+
+  Future<void> _confirmPurchased(DealDetailsViewModel viewModel) async {
+    if (_purchaseDialogInFlight ||
+        !mounted ||
+        viewModel.isUpdating ||
+        !viewModel.canMarkPurchased) {
+      return;
+    }
+
+    final expectedDeal = viewModel.deal;
+    _purchaseDialogInFlight = true;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Mark this deal as purchased?'),
+          content: const Text(
+            'Reservations will be locked after you confirm the purchase.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Not yet'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('I’ve bought it'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted ||
+          confirmed != true ||
+          viewModel.isUpdating ||
+          !viewModel.canMarkPurchased ||
+          !identical(viewModel.deal, expectedDeal)) {
+        return;
+      }
+
+      await viewModel.markPurchased();
+    } finally {
+      _purchaseDialogInFlight = false;
+    }
+  }
+
+  /// The app never moves money. What it refuses to do is let the host cancel
+  /// while pretending nobody paid.
+  Future<void> _confirmCancelDeal(DealDetailsViewModel viewModel) async {
+    if (_cancelDealDialogInFlight ||
+        !mounted ||
+        viewModel.isUpdating ||
+        !viewModel.canCancelDeal) {
+      return;
+    }
+
+    final expectedDeal = viewModel.deal;
+    final warning = viewModel.refundWarning;
+
+    _cancelDealDialogInFlight = true;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Cancel this deal?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (warning != null) ...[
+                Text(
+                  warning,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Cancelling does not refund them — you will have to hand it '
+                  'back yourself.',
+                ),
+              ] else
+                const Text(
+                  'Nobody has paid you yet, so there is nothing to hand back. '
+                  'The deal will close and its slots will be released.',
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Keep the deal'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Cancel the deal'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted ||
+          confirmed != true ||
+          viewModel.isUpdating ||
+          !viewModel.canCancelDeal ||
+          !identical(viewModel.deal, expectedDeal)) {
+        return;
+      }
+
+      await viewModel.cancelDeal();
+    } finally {
+      _cancelDealDialogInFlight = false;
+    }
   }
 }
 
 class _LifecycleActions extends StatelessWidget {
   const _LifecycleActions({
     required this.viewModel,
+    required this.onCancelSlot,
+    required this.onMarkPurchased,
     required this.onCancelDeal,
   });
 
   final DealDetailsViewModel viewModel;
+  final VoidCallback onCancelSlot;
+  final VoidCallback onMarkPurchased;
   final VoidCallback onCancelDeal;
 
   @override
@@ -227,7 +412,7 @@ class _LifecycleActions extends StatelessWidget {
           if (viewModel.canMarkPurchased)
             FilledButton.icon(
               key: const Key('detail-mark-purchased-button'),
-              onPressed: viewModel.isUpdating ? null : viewModel.markPurchased,
+              onPressed: viewModel.isUpdating ? null : onMarkPurchased,
               icon: const Icon(Icons.shopping_bag_outlined),
               label: const Text("I've bought it"),
             ),
@@ -245,10 +430,28 @@ class _LifecycleActions extends StatelessWidget {
       );
     }
 
+    if (viewModel.isLoadingParticipants) {
+      return FilledButton.icon(
+        key: const Key('detail-reserve-button'),
+        onPressed: null,
+        icon: const Icon(Icons.hourglass_top_outlined),
+        label: const Text('Checking availability…'),
+      );
+    }
+
+    if (viewModel.participantErrorMessage != null) {
+      return FilledButton.icon(
+        key: const Key('detail-reserve-button'),
+        onPressed: null,
+        icon: const Icon(Icons.cloud_off_outlined),
+        label: const Text('Participants unavailable'),
+      );
+    }
+
     if (viewModel.holdsSlot && viewModel.canCancel) {
       return OutlinedButton.icon(
         key: const Key('detail-reserve-button'),
-        onPressed: viewModel.isUpdating ? null : viewModel.cancel,
+        onPressed: viewModel.isUpdating ? null : onCancelSlot,
         style: errorStyle,
         icon: const Icon(Icons.remove_circle_outline),
         label: const Text('Cancel my slot'),
@@ -449,9 +652,42 @@ class _Participants extends StatelessWidget {
     final theme = Theme.of(context);
     final participants = viewModel.participants;
 
+    if (viewModel.isLoadingParticipants) {
+      return Row(
+        children: [
+          SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.2,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Loading participants…',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final participantError = viewModel.participantErrorMessage;
+    if (participantError != null) {
+      return AppBanner.error(
+        key: const Key('detail-participant-error'),
+        message: participantError,
+        actionLabel: 'Retry',
+        onAction: viewModel.retryParticipants,
+      );
+    }
+
     if (participants.isEmpty) {
       return Text(
-        'Nobody has claimed a share yet.',
+        'Nobody has claimed a slot yet.',
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
