@@ -106,7 +106,11 @@ class DealDetailsScreen extends StatelessWidget {
                             keyValue: const Key('detail-deadline'),
                           ),
                           const SizedBox(height: 28),
-                          const _SectionLabel('Who is in'),
+                          _SectionLabel(
+                            viewModel.isPurchased
+                                ? 'Pickup checklist'
+                                : 'Who is in',
+                          ),
                           _Participants(
                             key: const Key('detail-participants'),
                             viewModel: viewModel,
@@ -478,6 +482,17 @@ class _Participants extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
+        if (viewModel.pickupProgressLabel != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            viewModel.pickupProgressLabel!,
+            key: const Key('detail-pickup-progress-label'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -510,6 +525,14 @@ class _ParticipantRow extends StatelessWidget {
               if (participant.isHost)
                 Text(
                   '(organiser)',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              if (participant.collectedAt != null)
+                Text(
+                  _collectedAtLabel(participant.collectedAt!),
+                  key: Key('collected-at-${participant.userId}'),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -554,6 +577,29 @@ class _ParticipantRow extends StatelessWidget {
       },
     );
   }
+}
+
+String _collectedAtLabel(DateTime collectedAt) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final hour12 = collectedAt.hour % 12 == 0 ? 12 : collectedAt.hour % 12;
+  final minute = collectedAt.minute.toString().padLeft(2, '0');
+  final period = collectedAt.hour < 12 ? 'AM' : 'PM';
+
+  return 'Collected ${months[collectedAt.month - 1]} ${collectedAt.day}, '
+      '${collectedAt.year} at $hour12:$minute $period';
 }
 
 /// The host taps to mark a payment; everyone else just reads it.

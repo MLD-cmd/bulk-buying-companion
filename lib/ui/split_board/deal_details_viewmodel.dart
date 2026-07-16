@@ -77,6 +77,23 @@ class DealDetailsViewModel extends ChangeNotifier {
   bool get canMarkPaid => isHost && !isCancelled;
   bool get canMarkCollected => isHost && isPurchased && !isCancelled;
 
+  String? get pickupProgressLabel {
+    if (!isPurchased) return null;
+
+    final total = _deal.participantCount;
+    if (total == 0) return 'No pickups to track.';
+
+    final collected = _deal.collectedCount.clamp(0, total).toInt();
+    final remaining = total - collected;
+    if (remaining == 0) {
+      final noun = total == 1 ? 'pickup is' : 'pickups are';
+      return 'All $total $noun collected.';
+    }
+
+    final noun = remaining == 1 ? 'pickup' : 'pickups';
+    return '$collected of $total picked up - $remaining $noun remaining';
+  }
+
   /// What the host is still owed. The host's own slot counts as paid — they
   /// cannot pay themselves — so it is in the tally but not in the money.
   String get paymentLabel {

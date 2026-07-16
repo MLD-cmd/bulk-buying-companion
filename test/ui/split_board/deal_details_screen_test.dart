@@ -404,10 +404,13 @@ void main() {
       currentUserId: 'host',
     );
 
+    expect(find.text('PICKUP CHECKLIST'), findsOneWidget);
+    expect(find.text('1 of 2 picked up - 1 pickup remaining'), findsOneWidget);
     final anaCollected = find.byKey(const Key('mark-collected-ana'));
     expect(anaCollected, findsOneWidget);
     // The host's own share is collected the moment they buy; Ana's is not.
     expect(find.text('Mark collected'), findsOneWidget);
+    expect(find.textContaining('Collected '), findsOneWidget);
 
     await tester.tap(anaCollected);
     await tester.pumpAndSettle();
@@ -417,6 +420,8 @@ void main() {
       find.descendant(of: anaCollected, matching: find.text('Collected')),
       findsOneWidget,
     );
+    expect(find.text('All 2 pickups are collected.'), findsOneWidget);
+    expect(find.textContaining('Collected '), findsNWidgets(2));
   });
 }
 
