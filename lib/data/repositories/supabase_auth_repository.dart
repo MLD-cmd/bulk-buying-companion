@@ -62,6 +62,8 @@ abstract class SupabaseAuthGateway {
     required String displayName,
   });
 
+  Future<SupabaseAuthIdentity> updateDisplayName(String displayName);
+
   Future<void> signOut();
 }
 
@@ -106,6 +108,24 @@ class GoTrueSupabaseAuthGateway implements SupabaseAuthGateway {
         data: {'display_name': displayName},
       );
       return _mapResponse(response);
+    } on AuthException catch (error) {
+      throw _mapException(error);
+    }
+  }
+
+  @override
+  Future<SupabaseAuthIdentity> updateDisplayName(String displayName) async {
+    try {
+      final response = await _client.updateUser(
+        UserAttributes(data: {'display_name': displayName}),
+      );
+      final identity = _mapUser(response.user);
+      if (identity == null) {
+        throw const SupabaseAuthGatewayException(
+          message: 'Supabase returned no user for this profile update.',
+        );
+      }
+      return identity;
     } on AuthException catch (error) {
       throw _mapException(error);
     }
@@ -204,6 +224,20 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser> updateDisplayName(String displayName) async {
+    final trimmed = displayName.trim();
+    if (trimmed.isEmpty) {
+      throw const AuthFailure('Enter your full name.');
+    }
+
+    try {
+      return _mapIdentity(await _gateway.updateDisplayName(trimmed))!;
+    } on SupabaseAuthGatewayException catch (error) {
+      throw AuthFailure(_messageFor(error));
+    }
+  }
+
+  @override
   Future<void> signOut() async {
     try {
       await _gateway.signOut();
@@ -242,8 +276,8 @@ class SupabaseAuthRepository implements AuthRepository {
       'email_address_invalid' => 'Enter a valid email address.',
       'email_not_confirmed' => 'Confirm your email address, then log in.',
       'weak_password' => 'Choose a longer password.',
-      'over_email_send_rate_limit' ||
-      'over_request_rate_limit' => 'Too many attempts. Please wait and try again.',
+      'over_email_send_rate_limit' || 'over_request_rate_limit' =>
+        'Too many attempts. Please wait and try again.',
       'signup_disabled' => 'New accounts are not being accepted right now.',
       _ => null,
     };

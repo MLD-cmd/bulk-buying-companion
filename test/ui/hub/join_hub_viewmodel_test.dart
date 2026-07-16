@@ -460,6 +460,11 @@ class _SignedInAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser> updateDisplayName(String displayName) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> signOut() async {}
 
   @override

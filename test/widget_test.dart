@@ -3,9 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/hub_repository.dart';
+import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/data/services/location_service.dart';
 import 'package:bulk_buying_companion/main.dart';
 import 'package:bulk_buying_companion/models/app_user.dart';
+import 'package:bulk_buying_companion/models/deal.dart';
+import 'package:bulk_buying_companion/models/reservation.dart';
 import 'package:bulk_buying_companion/ui/hub/widgets/hub_card.dart';
 
 void main() {
@@ -19,6 +22,7 @@ void main() {
       BulkBuyingCompanionApp(
         authRepository: repository ?? MockAuthRepository(),
         hubRepository: hubRepository,
+        reservationRepository: const _EmptyReservationRepository(),
         locationService: locationService ?? const _StubLocationService(),
       ),
     );
@@ -497,6 +501,11 @@ class _ConfirmationAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser> updateDisplayName(String displayName) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> signOut() async {}
 
   @override
@@ -507,5 +516,46 @@ class _FailingSignOutRepository extends MockAuthRepository {
   @override
   Future<void> signOut() {
     throw const AuthFailure('Check your internet connection and try again.');
+  }
+}
+
+class _EmptyReservationRepository implements ReservationRepository {
+  const _EmptyReservationRepository();
+
+  @override
+  Future<List<Reservation>> getParticipants(String dealId) async => const [];
+
+  @override
+  Future<Deal> reserveSlot(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> cancelReservation(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> setPaid(String dealId, String userId, {required bool paid}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> setCollected(
+    String dealId,
+    String userId, {
+    required bool collected,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> markPurchased(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> cancelDeal(String dealId) {
+    throw UnimplementedError();
   }
 }
