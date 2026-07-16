@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
@@ -9,8 +11,9 @@ import 'package:provider/provider.dart';
 void main() {
   Future<void> pumpScreen(
     WidgetTester tester,
-    DealRepository repository,
-  ) async {
+    DealRepository repository, {
+    ValueChanged<Future<Deal?>>? onRoutePushed,
+  }) async {
     await tester.pumpWidget(
       Provider<DealRepository>.value(
         value: repository,
@@ -19,9 +22,12 @@ void main() {
             builder: (context) => Scaffold(
               body: Center(
                 child: TextButton(
-                  onPressed: () => Navigator.of(
-                    context,
-                  ).push(CreateDealScreen.route('colon', 'Colon Street Hub')),
+                  onPressed: () {
+                    final result = Navigator.of(
+                      context,
+                    ).push(CreateDealScreen.route('colon', 'Colon Street Hub'));
+                    onRoutePushed?.call(result);
+                  },
                   child: const Text('open'),
                 ),
               ),
@@ -50,10 +56,12 @@ void main() {
     );
     await tester.enterText(find.byKey(const Key('deal-amount-field')), amount);
     if (unit != null) {
-      final chip = find.byKey(Key('deal-unit-${unit.name}'));
-      await tester.ensureVisible(chip);
-      await tester.tap(chip);
-      await tester.pump();
+      final field = find.byKey(const Key('deal-unit-field'));
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(_unitDisplayName(unit)).last);
+      await tester.pumpAndSettle();
     }
     await tester.enterText(
       find.byKey(const Key('deal-total-slots-field')),
@@ -105,6 +113,491 @@ void main() {
     );
   });
 
+  testWidgets('untouched Back leaves without a discard confirmation', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Post a deal'), findsNothing);
+    expect(find.text('Discard these details?'), findsNothing);
+  });
+
+  testWidgets('Keep editing preserves every entered deal detail', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+    await fillForm(tester, unit: DealUnit.litre);
+    await tester.enterText(
+      find.byKey(const Key('deal-description-field')),
+      'Five sealed one-litre bottles',
+    );
+    final category = find.byKey(const Key('deal-category-drinks'));
+    await tester.ensureVisible(category);
+    await tester.tap(category);
+    await tester.pump();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard these details?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    expect(
+      _textField(tester, const Key('deal-title-field')).controller?.text,
+      'Cooking Oil 5L',
+    );
+    expect(
+      _textField(tester, const Key('deal-description-field')).controller?.text,
+      'Five sealed one-litre bottles',
+    );
+    expect(
+      _textField(tester, const Key('deal-total-price-field')).controller?.text,
+      '750',
+    );
+    expect(
+      _textField(tester, const Key('deal-amount-field')).controller?.text,
+      '1',
+    );
+    expect(
+      _textField(tester, const Key('deal-total-slots-field')).controller?.text,
+      '5',
+    );
+    expect(
+      _textField(
+        tester,
+        const Key('deal-pickup-location-field'),
+      ).controller?.text,
+      'USJR Main Gate',
+    );
+    expect(find.text('Litres (L)'), findsOneWidget);
+    expect(
+      tester
+          .widget<ChoiceChip>(find.byKey(const Key('deal-category-drinks')))
+          .selected,
+      isTrue,
+    );
+  });
+
+  testWidgets('Discard leaves the form exactly once', (tester) async {
+    final observer = _DealRouteObserver();
+    await tester.pumpWidget(
+      Provider<DealRepository>.value(
+        value: MockDealRepository(),
+        child: MaterialApp(
+          navigatorObservers: [observer],
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(
+                  context,
+                ).push(CreateDealScreen.route('colon', 'Colon Street Hub')),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('deal-title-field')),
+      'Rice Sack',
+    );
+    await tester.pump();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Post a deal'), findsNothing);
+    expect(observer.dealRoutePops, 1);
+  });
+
+  testWidgets('rapid Back requests do not stack discard dialogs', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+    await tester.enterText(
+      find.byKey(const Key('deal-title-field')),
+      'Rice Sack',
+    );
+
+    final guard = tester.widget<PopScope<Deal>>(find.byType(PopScope<Deal>));
+    guard.onPopInvokedWithResult?.call(false, null);
+    guard.onPopInvokedWithResult?.call(false, null);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets('disposing an open discard dialog has no stale callback', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+    await tester.enterText(
+      find.byKey(const Key('deal-title-field')),
+      'Rice Sack',
+    );
+    await tester.pump();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Back cannot discard or dispose a publish in progress', (
+    tester,
+  ) async {
+    final repository = _DelayedDealRepository();
+    await pumpScreen(tester, repository);
+    await fillForm(tester);
+
+    final submitButton = find.byKey(const Key('deal-submit-button'));
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pump();
+
+    expect(repository.createCalls, 1);
+    expect(find.text('Publishing…'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pump();
+    expect(find.text('Post a deal'), findsOneWidget);
+    expect(find.text('Discard these details?'), findsNothing);
+
+    await tester.pageBack();
+    await tester.pump();
+    expect(find.text('Post a deal'), findsOneWidget);
+    expect(find.text('Discard these details?'), findsNothing);
+
+    final guard = tester.widget<PopScope<Deal>>(find.byType(PopScope<Deal>));
+    guard.onPopInvokedWithResult?.call(false, null);
+    await tester.pump();
+    expect(find.text('Discard these details?'), findsNothing);
+
+    repository.fail(
+      const DealFailure('Could not publish this deal right now.'),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not publish this deal right now.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets(
+    'pending publish blocks Help and returns its Deal from the route',
+    (tester) async {
+      final repository = _DelayedDealRepository();
+      late Future<Deal?> routeResult;
+      await pumpScreen(
+        tester,
+        repository,
+        onRoutePushed: (result) => routeResult = result,
+      );
+      await fillForm(tester);
+
+      final help = find.widgetWithIcon(IconButton, Icons.help_outline);
+      final submitButton = find.byKey(const Key('deal-submit-button'));
+      final staleHelp = tester.widget<IconButton>(help).onPressed!;
+      final stalePublish = tester.widget<FilledButton>(submitButton).onPressed!;
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
+      await tester.pump();
+
+      expect(tester.widget<IconButton>(help).onPressed, isNull);
+      expect(tester.widget<FilledButton>(submitButton).onPressed, isNull);
+
+      staleHelp();
+      stalePublish();
+      await tester.pump();
+
+      expect(repository.createCalls, 1);
+      expect(find.text('How to post a deal'), findsNothing);
+
+      final published = _publishedDeal();
+      repository.succeed(published);
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(await routeResult, same(published));
+      expect(find.text('Post a deal'), findsNothing);
+      expect(find.text('How to post a deal'), findsNothing);
+
+      staleHelp();
+      stalePublish();
+      await tester.pump();
+      expect(repository.createCalls, 1);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('pending publish blocks current and stale deadline clearing', (
+    tester,
+  ) async {
+    final repository = _DelayedDealRepository();
+    await pumpScreen(tester, repository);
+    await fillForm(tester);
+
+    final deadlineButton = find.byKey(const Key('deal-deadline-button'));
+    await tester.ensureVisible(deadlineButton);
+    await tester.tap(deadlineButton);
+    await tester.pumpAndSettle();
+
+    final deadline = DateTime.now().add(const Duration(days: 4));
+    final picker = tester.widget<CalendarDatePicker>(
+      find.byType(CalendarDatePicker),
+    );
+    picker.onDateChanged(deadline);
+    await tester.pump();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    final deadlineLabel =
+        'Closes ${deadline.month}/${deadline.day}/${deadline.year}';
+    final clearButton = find.widgetWithIcon(IconButton, Icons.close);
+    final staleClear = tester.widget<IconButton>(clearButton).onPressed!;
+    expect(find.text(deadlineLabel), findsWidgets);
+
+    final submitButton = find.byKey(const Key('deal-submit-button'));
+    await tester.ensureVisible(submitButton);
+    await tester.tap(submitButton);
+    await tester.pump();
+
+    expect(tester.widget<IconButton>(clearButton).onPressed, isNull);
+    staleClear();
+    await tester.pump();
+
+    expect(find.text(deadlineLabel), findsWidgets);
+    expect(find.byTooltip('Clear deadline'), findsOneWidget);
+    expect(repository.createCalls, 1);
+
+    repository.succeed(_publishedDeal());
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('clearing edited text still protects the draft', (tester) async {
+    await pumpScreen(tester, MockDealRepository());
+    final title = find.byKey(const Key('deal-title-field'));
+    await tester.enterText(title, 'Rice Sack');
+    await tester.enterText(title, '');
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets('category and unit changes protect the draft', (tester) async {
+    await pumpScreen(tester, MockDealRepository());
+    final category = find.byKey(const Key('deal-category-drinks'));
+    await tester.ensureVisible(category);
+    await tester.tap(category);
+    await tester.pump();
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+
+    final unit = find.byKey(const Key('deal-unit-field'));
+    await tester.ensureVisible(unit);
+    await tester.tap(unit);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pieces').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Pieces'), findsOneWidget);
+  });
+
+  testWidgets('unit dropdown retains all measurements with clear names', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    final field = find.byKey(const Key('deal-unit-field'));
+    expect(field, findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<DealUnit>), findsOneWidget);
+    expect(find.byType(ChoiceChip), findsNWidgets(DealCategory.values.length));
+
+    final dropdown = tester.widget<DropdownButton<DealUnit>>(
+      find.descendant(
+        of: field,
+        matching: find.byType(DropdownButton<DealUnit>),
+      ),
+    );
+    final labels = dropdown.items!
+        .map((item) => (item.child as Text).data)
+        .toList();
+    expect(labels, <String>[
+      'Kilograms (kg)',
+      'Litres (L)',
+      'Pieces',
+      'Packs',
+      'Bottles',
+      'Cans',
+      'Sachets',
+    ]);
+
+    for (final unit in DealUnit.values) {
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(_unitDisplayName(unit)).last);
+      await tester.pumpAndSettle();
+      expect(find.text(_unitDisplayName(unit)), findsOneWidget);
+    }
+
+    final semantics = tester.getSemantics(field);
+    expect('${semantics.label} ${semantics.value}', contains('Sachets'));
+  });
+
+  testWidgets('setting and clearing a deadline keeps the draft protected', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+    final deadline = find.byKey(const Key('deal-deadline-button'));
+    await tester.ensureVisible(deadline);
+    await tester.tap(deadline);
+    await tester.pumpAndSettle();
+
+    final picker = tester.widget<CalendarDatePicker>(
+      find.byType(CalendarDatePicker),
+    );
+    picker.onDateChanged(DateTime.now().add(const Duration(days: 4)));
+    await tester.pump();
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Closes '), findsWidgets);
+    await tester.tap(find.byTooltip('Clear deadline'));
+    await tester.pump();
+    expect(find.text('Set a deadline (optional)'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
+  });
+
+  testWidgets('keyboard actions progress through deal fields', (tester) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    final fields = <Key>[
+      const Key('deal-title-field'),
+      const Key('deal-description-field'),
+      const Key('deal-total-price-field'),
+      const Key('deal-amount-field'),
+      const Key('deal-total-slots-field'),
+      const Key('deal-pickup-location-field'),
+    ];
+    final actions = <TextInputAction>[
+      TextInputAction.next,
+      TextInputAction.next,
+      TextInputAction.next,
+      TextInputAction.next,
+      TextInputAction.next,
+      TextInputAction.done,
+    ];
+
+    for (var index = 0; index < fields.length; index++) {
+      final field = _textField(tester, fields[index]);
+      expect(field.textInputAction, actions[index]);
+    }
+
+    await tester.tap(find.byKey(fields.first));
+    await tester.pump();
+    for (var index = 1; index < fields.length; index++) {
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      final field = _textField(tester, fields[index]);
+      expect(field.focusNode?.hasFocus, isTrue);
+    }
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(_textField(tester, fields.last).focusNode?.hasFocus, isFalse);
+  });
+
+  testWidgets('invalid submit focuses the first invalid field', (tester) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    await submit(tester);
+
+    final title = _textField(tester, const Key('deal-title-field'));
+    expect(title.focusNode?.hasFocus, isTrue);
+  });
+
+  testWidgets('validation focus follows the visual field order', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+    await tester.enterText(
+      find.byKey(const Key('deal-title-field')),
+      'Rice Sack',
+    );
+    await tester.enterText(
+      find.byKey(const Key('deal-description-field')),
+      'x' * 281,
+    );
+
+    await submit(tester);
+
+    expect(
+      _textField(
+        tester,
+        const Key('deal-description-field'),
+      ).focusNode?.hasFocus,
+      isTrue,
+    );
+
+    await tester.enterText(find.byKey(const Key('deal-description-field')), '');
+    await submit(tester);
+
+    expect(
+      _textField(
+        tester,
+        const Key('deal-total-price-field'),
+      ).focusNode?.hasFocus,
+      isTrue,
+    );
+  });
+
+  testWidgets('Post Deal help explains only the existing publish flow', (
+    tester,
+  ) async {
+    await pumpScreen(tester, MockDealRepository());
+
+    final help = find.widgetWithIcon(IconButton, Icons.help_outline);
+    expect(help, findsOneWidget);
+    expect(tester.getSize(help).width, greaterThanOrEqualTo(48));
+    expect(tester.getSize(help).height, greaterThanOrEqualTo(48));
+
+    await tester.tap(help);
+    await tester.pumpAndSettle();
+
+    expect(find.text('How to post a deal'), findsOneWidget);
+    expect(find.text('Product'), findsWidgets);
+    expect(find.text('Split'), findsWidgets);
+    expect(find.text('Pickup and deadline'), findsOneWidget);
+    expect(find.text('Review'), findsWidgets);
+    expect(find.text('Publish', skipOffstage: false), findsOneWidget);
+    expect(find.text('Close'), findsOneWidget);
+  });
+
   testWidgets('student publishes a deal and it lands on the hub feed', (
     tester,
   ) async {
@@ -128,6 +621,7 @@ void main() {
 
     // Popped back to the launching screen.
     expect(find.text('Post a deal'), findsNothing);
+    expect(find.text('Discard these details?'), findsNothing);
 
     final deals = await repository.getDeals('colon');
     final published = deals.firstWhere(
@@ -209,6 +703,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Post a deal'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Discard these details?'), findsOneWidget);
   });
 
   testWidgets('shows what each student physically gets', (tester) async {
@@ -272,6 +770,32 @@ void main() {
   });
 }
 
+String _unitDisplayName(DealUnit unit) => switch (unit) {
+  DealUnit.kg => 'Kilograms (kg)',
+  DealUnit.litre => 'Litres (L)',
+  DealUnit.pieces => 'Pieces',
+  DealUnit.packs => 'Packs',
+  DealUnit.bottles => 'Bottles',
+  DealUnit.cans => 'Cans',
+  DealUnit.sachets => 'Sachets',
+};
+
+TextField _textField(WidgetTester tester, Key key) {
+  return tester.widget<TextField>(
+    find.descendant(of: find.byKey(key), matching: find.byType(TextField)),
+  );
+}
+
+class _DealRouteObserver extends NavigatorObserver {
+  int dealRoutePops = 0;
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is MaterialPageRoute<Deal>) dealRoutePops++;
+    super.didPop(route, previousRoute);
+  }
+}
+
 class _RecordingDealRepository implements DealRepository {
   int createCalls = 0;
 
@@ -296,3 +820,34 @@ class _RefusingDealRepository implements DealRepository {
     );
   }
 }
+
+class _DelayedDealRepository implements DealRepository {
+  final Completer<Deal> _completion = Completer<Deal>();
+  int createCalls = 0;
+
+  @override
+  Future<List<Deal>> getDeals(String hubId) async => const [];
+
+  @override
+  Future<Deal> createDeal(DealDraft draft) {
+    createCalls++;
+    return _completion.future;
+  }
+
+  void succeed(Deal deal) => _completion.complete(deal);
+
+  void fail(Object error) => _completion.completeError(error);
+}
+
+Deal _publishedDeal() => const Deal(
+  id: 'published-deal',
+  hubId: 'colon',
+  title: 'Cooking Oil 5L',
+  category: DealCategory.grocery,
+  totalPrice: 750,
+  amount: 1,
+  unit: DealUnit.litre,
+  availableSlots: 4,
+  totalSlots: 5,
+  pickupLocation: 'USJR Main Gate',
+);

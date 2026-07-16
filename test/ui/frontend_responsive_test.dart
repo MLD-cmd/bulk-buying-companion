@@ -1,4 +1,5 @@
 import 'package:bulk_buying_companion/data/repositories/auth_repository.dart';
+import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/data/repositories/hub_repository.dart';
 import 'package:bulk_buying_companion/data/services/location_service.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
@@ -9,6 +10,7 @@ import 'package:bulk_buying_companion/ui/hub/join_hub_viewmodel.dart';
 import 'package:bulk_buying_companion/ui/hub/widgets/hub_card.dart';
 import 'package:bulk_buying_companion/ui/shared/app_icon_container.dart';
 import 'package:bulk_buying_companion/ui/shared/app_theme.dart';
+import 'package:bulk_buying_companion/ui/split_board/create_deal_screen.dart';
 import 'package:bulk_buying_companion/ui/split_board/widgets/deal_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -222,6 +224,53 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Post Deal stays usable at 320 pixels with 200 percent text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+
+    await tester.pumpWidget(
+      Provider<DealRepository>.value(
+        value: MockDealRepository(),
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => Navigator.of(
+                  context,
+                ).push(CreateDealScreen.route('colon', 'Colon Street Hub')),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final help = find.byTooltip('How to post a deal');
+    expect(tester.getSize(help).width, greaterThanOrEqualTo(48));
+    expect(tester.getSize(help).height, greaterThanOrEqualTo(48));
+    expect(find.byKey(const Key('deal-unit-field')), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('deal-unit-field')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    await tester.ensureVisible(find.byKey(const Key('deal-submit-button')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<JoinHubViewModel> _pumpCurrentHubScreen(
