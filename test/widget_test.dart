@@ -57,6 +57,26 @@ void main() {
     expect(find.text('Find your hub'), findsNothing);
   });
 
+  testWidgets('authentication stays usable at narrow width and large text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await pumpApp(tester);
+    await tester.ensureVisible(find.widgetWithText(FilledButton, 'Log in'));
+    await tester.pump();
+
+    expect(find.byKey(const Key('auth-brand-mark')), findsOneWidget);
+    expect(find.text('Login'), findsOneWidget);
+    expect(find.text('Register'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('student can switch to registration', (tester) async {
     await pumpApp(tester);
 

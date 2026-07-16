@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/auth_repository.dart';
-import '../shared/app_theme.dart';
+import '../shared/app_banner.dart';
 import 'auth_viewmodel.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -42,16 +42,16 @@ class _AuthScreenState extends State<AuthScreen> {
                 builder: (context, constraints) {
                   return SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 28,
+                      horizontal: 20,
+                      vertical: 24,
                     ),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight - 56,
+                        minHeight: constraints.maxHeight - 48,
                       ),
                       child: Center(
-                        child: SizedBox(
-                          width: 440,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 440),
                           child: Form(
                             key: _formKey,
                             child: Column(
@@ -59,7 +59,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 const _BrandMark(),
-                                const SizedBox(height: 28),
+                                const SizedBox(height: 24),
                                 Text(
                                   isRegistering
                                       ? 'Create your account'
@@ -68,7 +68,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .headlineMedium
-                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                      ?.copyWith(fontSize: 30),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
@@ -81,7 +81,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                         color: Theme.of(
                                           context,
                                         ).colorScheme.onSurfaceVariant,
-                                        height: 1.45,
+                                        height: 1.4,
                                       ),
                                 ),
                                 const SizedBox(height: 24),
@@ -116,7 +116,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                               prefixIcon: Icon(
                                                 Icons.person_outline,
                                               ),
-                                              border: OutlineInputBorder(),
                                             ),
                                             validator: (value) {
                                               if ((value ?? '')
@@ -141,7 +140,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                     labelText: 'Email',
                                     hintText: 'you@example.com',
                                     prefixIcon: Icon(Icons.email_outlined),
-                                    border: OutlineInputBorder(),
                                   ),
                                   validator: (value) {
                                     if ((value ?? '').trim().isEmpty) {
@@ -185,7 +183,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                             : Icons.visibility_off_outlined,
                                       ),
                                     ),
-                                    border: const OutlineInputBorder(),
                                   ),
                                   validator: (value) =>
                                       PasswordValidator.errorFor(value ?? ''),
@@ -222,7 +219,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                               : Icons.visibility_off_outlined,
                                         ),
                                       ),
-                                      border: const OutlineInputBorder(),
                                     ),
                                     validator: (value) {
                                       if (value != _passwordController.text) {
@@ -234,14 +230,15 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ],
                                 if (viewModel.errorMessage != null) ...[
                                   const SizedBox(height: 16),
-                                  _ErrorBanner(
+                                  AppBanner.error(
                                     message: viewModel.errorMessage!,
                                   ),
                                 ],
                                 if (viewModel.noticeMessage != null) ...[
                                   const SizedBox(height: 16),
-                                  _NoticeBanner(
+                                  AppBanner.notice(
                                     message: viewModel.noticeMessage!,
+                                    icon: Icons.mark_email_read_outlined,
                                   ),
                                 ],
                                 const SizedBox(height: 20),
@@ -249,21 +246,11 @@ class _AuthScreenState extends State<AuthScreen> {
                                   onPressed: viewModel.isSubmitting
                                       ? null
                                       : () => _submit(viewModel),
-                                  style: FilledButton.styleFrom(
-                                    minimumSize: const Size.fromHeight(52),
-                                    backgroundColor: AppTheme.accent,
-                                    foregroundColor: Colors.white,
-                                    textStyle: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
                                   child: viewModel.isSubmitting
                                       ? const SizedBox.square(
                                           dimension: 22,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2.5,
-                                            color: Colors.white,
                                           ),
                                         )
                                       : Text(
@@ -307,25 +294,23 @@ class _BrandMark extends StatelessWidget {
     return Column(
       children: [
         Container(
+          key: const Key('auth-brand-mark'),
           width: 64,
           height: 64,
           decoration: BoxDecoration(
-            color: AppTheme.accent.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(18),
+            color: Theme.of(context).colorScheme.primaryContainer,
+            shape: BoxShape.circle,
           ),
-          child: const Icon(
+          child: Icon(
             Icons.shopping_basket_outlined,
-            color: AppTheme.accent,
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
             size: 32,
           ),
         ),
         const SizedBox(height: 12),
         Text(
           'Campus Split-Share',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.2,
-          ),
+          style: Theme.of(context).textTheme.titleMedium,
         ),
       ],
     );
@@ -345,8 +330,9 @@ class _ModeSelector extends StatelessWidget {
       height: 52,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
+        color: scheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         children: AuthMode.values.map((item) {
@@ -357,20 +343,20 @@ class _ModeSelector extends StatelessWidget {
               selected: selected,
               button: true,
               child: InkWell(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(9),
                 onTap: onChanged == null ? null : () => onChanged!(item),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: selected ? scheme.surface : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(9),
                     boxShadow: selected
                         ? const [
                             BoxShadow(
-                              color: Color(0x18000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 2),
+                              color: Color(0x10000000),
+                              blurRadius: 6,
+                              offset: Offset(0, 1),
                             ),
                           ]
                         : null,
@@ -378,7 +364,7 @@ class _ModeSelector extends StatelessWidget {
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: selected
                           ? scheme.onSurface
                           : scheme.onSurfaceVariant,
@@ -389,73 +375,6 @@ class _ModeSelector extends StatelessWidget {
             ),
           );
         }).toList(),
-      ),
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: scheme.errorContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.error_outline, color: scheme.onErrorContainer),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(color: scheme.onErrorContainer),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NoticeBanner extends StatelessWidget {
-  const _NoticeBanner({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    const foreground = Color(0xFF173E28);
-    return Semantics(
-      container: true,
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFDCEFE3),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.mark_email_read_outlined, color: foreground),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(message, style: const TextStyle(color: foreground)),
-            ),
-          ],
-        ),
       ),
     );
   }
