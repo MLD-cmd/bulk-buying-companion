@@ -46,6 +46,7 @@ void main() {
     final retryButton = find.widgetWithText(TextButton, 'Try again');
     expect(retryButton, findsOneWidget);
     expect(tester.getSemantics(retryButton).label, contains('Try again'));
+    expect(tester.getSize(retryButton).shortestSide, greaterThanOrEqualTo(44));
 
     await tester.tap(retryButton);
 
@@ -166,12 +167,66 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(
       tester.getSemantics(find.byType(TextButton)).label,
-      contains('Try again'),
+      contains('Try again in progress'),
     );
     expect(progress.width, 18);
     expect(progress.height, 18);
     await tester.tap(find.byType(TextButton));
     expect(retries, 0);
+  });
+
+  testWidgets('AppBanner stays accessible across the viewport matrix', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final size in _responsiveViewports) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: Scaffold(
+              body: AppBanner.error(
+                message: 'Couldn’t refresh deals. Showing saved deals.',
+                actionLabel: 'Retry',
+                onAction: _emptyAction,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final banner = find.byType(AppBanner);
+      final liveError = find.descendant(
+        of: banner,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics && widget.properties.liveRegion == true,
+        ),
+      );
+      final retry = find.widgetWithText(TextButton, 'Retry');
+      expect(liveError, findsOneWidget, reason: 'error is not live at $size');
+      expect(
+        tester.getSemantics(liveError).flagsCollection.isLiveRegion,
+        isTrue,
+        reason: 'error is not live at $size',
+      );
+      expect(
+        tester.getSemantics(retry).label,
+        contains('Retry'),
+        reason: 'retry is not labelled at $size',
+      );
+      expect(
+        tester.getSize(retry).shortestSide,
+        greaterThanOrEqualTo(44),
+        reason: 'retry touch target is too small at $size',
+      );
+      expect(tester.takeException(), isNull, reason: 'overflow at $size');
+    }
   });
 
   testWidgets('AppMessageState exposes an optional retry action', (
@@ -279,3 +334,10 @@ Future<void> _pumpGeometryBanner(
 }
 
 void _emptyAction() {}
+
+const _responsiveViewports = <Size>[
+  Size(320, 568),
+  Size(412, 915),
+  Size(915, 412),
+  Size(1200, 900),
+];

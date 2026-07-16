@@ -122,11 +122,22 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
         appBar: AppBar(
           title: const Text('Post a deal'),
           actions: [
-            IconButton(
-              onPressed: _submissionFlowActive ? null : _showHelp,
-              tooltip: 'How to post a deal',
-              constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-              icon: const Icon(Icons.help_outline),
+            Semantics(
+              key: const Key('deal-help-button-semantics'),
+              label: 'How to post a deal',
+              button: true,
+              enabled: !_submissionFlowActive,
+              onTap: _submissionFlowActive ? null : _showHelp,
+              excludeSemantics: true,
+              child: IconButton(
+                onPressed: _submissionFlowActive ? null : _showHelp,
+                tooltip: 'How to post a deal',
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
+                icon: const Icon(Icons.help_outline),
+              ),
             ),
           ],
         ),

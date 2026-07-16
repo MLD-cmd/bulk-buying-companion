@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
@@ -150,7 +151,22 @@ void main() {
       ),
       findsOneWidget,
     );
+    final participantError = find.byKey(const Key('detail-participant-error'));
+    final liveParticipantError = find.descendant(
+      of: participantError,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.liveRegion == true,
+      ),
+    );
+    final retry = find.widgetWithText(TextButton, 'Retry');
     expect(find.text('Retry'), findsOneWidget);
+    expect(liveParticipantError, findsOneWidget);
+    expect(
+      tester.getSemantics(liveParticipantError).flagsCollection.isLiveRegion,
+      isTrue,
+    );
+    expect(tester.getSemantics(retry).label, contains('Retry'));
+    expect(tester.getSize(retry).shortestSide, greaterThanOrEqualTo(44));
     expect(find.text('Nobody has claimed a slot yet.'), findsNothing);
 
     await tester.tap(find.text('Retry'));
@@ -182,12 +198,17 @@ void main() {
     await pumpControlled(tester, repository: repository, currentUserId: 'ana');
 
     expect(find.text('Checking availability…'), findsOneWidget);
+    final reserveAction = find.byKey(const Key('detail-reserve-button'));
+    expect(tester.widget<FilledButton>(reserveAction).onPressed, isNull);
     expect(
-      tester
-          .widget<FilledButton>(find.byKey(const Key('detail-reserve-button')))
-          .onPressed,
-      isNull,
+      tester.getSemantics(reserveAction).flagsCollection.isEnabled,
+      Tristate.isFalse,
     );
+    expect(
+      tester.getSemantics(reserveAction).label,
+      contains('Checking availability'),
+    );
+    expect(tester.getSize(reserveAction).height, greaterThanOrEqualTo(48));
 
     repository.participantRequests.single.completeError(StateError('offline'));
     await tester.pump();
@@ -283,7 +304,7 @@ void main() {
     final cancelButton = tester.widget<OutlinedButton>(cancel);
     cancelButton.onPressed!();
     cancelButton.onPressed!();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Cancel your slot?'), findsOneWidget);
     expect(
@@ -292,6 +313,12 @@ void main() {
     );
     expect(find.text('Keep slot'), findsOneWidget);
     expect(find.text('Cancel slot'), findsOneWidget);
+    final keepSlot = find.widgetWithText(TextButton, 'Keep slot');
+    final cancelSlot = find.widgetWithText(TextButton, 'Cancel slot');
+    expect(tester.getSemantics(find.text('Keep slot')).label, 'Keep slot');
+    expect(tester.getSemantics(find.text('Cancel slot')).label, 'Cancel slot');
+    expect(tester.getSize(keepSlot).shortestSide, greaterThanOrEqualTo(44));
+    expect(tester.getSize(cancelSlot).shortestSide, greaterThanOrEqualTo(44));
     expect(repository.cancelCalls, 0);
 
     await tester.tap(find.text('Keep slot'));
@@ -353,7 +380,7 @@ void main() {
     final purchaseButton = tester.widget<FilledButton>(purchase);
     purchaseButton.onPressed!();
     purchaseButton.onPressed!();
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Mark this deal as purchased?'), findsOneWidget);
     expect(
@@ -362,6 +389,15 @@ void main() {
     );
     expect(find.text('Not yet'), findsOneWidget);
     expect(find.text('I’ve bought it'), findsOneWidget);
+    final notYet = find.widgetWithText(TextButton, 'Not yet');
+    final boughtIt = find.widgetWithText(TextButton, 'I’ve bought it');
+    expect(tester.getSemantics(find.text('Not yet')).label, 'Not yet');
+    expect(
+      tester.getSemantics(find.text('I’ve bought it')).label,
+      'I’ve bought it',
+    );
+    expect(tester.getSize(notYet).shortestSide, greaterThanOrEqualTo(44));
+    expect(tester.getSize(boughtIt).shortestSide, greaterThanOrEqualTo(44));
     expect(repository.markPurchasedCalls, 0);
 
     await tester.tap(find.text('Not yet'));
@@ -467,6 +503,68 @@ void main() {
     expect(find.byTooltip('How deal details work'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'participant recovery and help support the viewport matrix at 200 percent',
+    (tester) async {
+      for (final size in _responsiveViewports) {
+        final repository = _ScreenReservationRepository(
+          deal: hostedDeal(availableSlots: 3, totalSlots: 4),
+          currentUserId: 'ana',
+          failParticipantsImmediately: true,
+        );
+        await pumpControlled(
+          tester,
+          repository: repository,
+          currentUserId: 'ana',
+          size: size,
+          textScale: 2,
+        );
+        await tester.pumpAndSettle();
+
+        final action = find.byKey(const Key('detail-reserve-button'));
+        final help = find.byKey(const Key('detail-help-button-semantics'));
+        expect(
+          tester.getSemantics(action).flagsCollection.isEnabled,
+          Tristate.isFalse,
+          reason: 'participant action is enabled at $size',
+        );
+        expect(
+          tester.getSize(action).height,
+          greaterThanOrEqualTo(48),
+          reason: 'participant action is too small at $size',
+        );
+        expect(
+          tester.getSemantics(help).label,
+          'How deal details work',
+          reason: 'help is not labelled at $size',
+        );
+        expect(
+          tester
+              .getSize(find.widgetWithIcon(IconButton, Icons.help_outline))
+              .shortestSide,
+          greaterThanOrEqualTo(48),
+          reason: 'help is too small at $size',
+        );
+        expect(tester.takeException(), isNull, reason: 'overflow at $size');
+
+        await tester.tap(help);
+        await tester.pumpAndSettle();
+        expect(
+          find.widgetWithText(FilledButton, 'Close'),
+          findsOneWidget,
+          reason: 'help cannot be closed at $size',
+        );
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'help overflow at $size',
+        );
+        await tester.tap(find.widgetWithText(FilledButton, 'Close'));
+        await tester.pumpAndSettle();
+      }
+    },
+  );
 
   testWidgets('removal during dialog or mutation avoids stale context work', (
     tester,
@@ -885,6 +983,7 @@ class _ScreenReservationRepository implements ReservationRepository {
   _ScreenReservationRepository({
     required Deal deal,
     required String currentUserId,
+    this.failParticipantsImmediately = false,
   }) : _deal = deal,
        _delegate = MockReservationRepository(
          deal: deal,
@@ -893,6 +992,7 @@ class _ScreenReservationRepository implements ReservationRepository {
 
   final Deal _deal;
   final MockReservationRepository _delegate;
+  final bool failParticipantsImmediately;
   final List<Completer<List<Reservation>>> participantRequests = [];
   final Completer<Deal> reserveRequest = Completer<Deal>();
   final Completer<Deal> cancelRequest = Completer<Deal>();
@@ -904,6 +1004,9 @@ class _ScreenReservationRepository implements ReservationRepository {
 
   @override
   Future<List<Reservation>> getParticipants(String dealId) {
+    if (failParticipantsImmediately) {
+      return Future<List<Reservation>>.error(StateError('offline'));
+    }
     final request = Completer<List<Reservation>>();
     participantRequests.add(request);
     return request.future;
@@ -1028,3 +1131,10 @@ const _reservableDeal = Deal(
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
 );
+
+const _responsiveViewports = <Size>[
+  Size(320, 568),
+  Size(412, 915),
+  Size(915, 412),
+  Size(1200, 900),
+];

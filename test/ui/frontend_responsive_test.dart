@@ -335,6 +335,81 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'changed hub and form screens support the complete viewport matrix at 200 percent',
+    (tester) async {
+      for (final size in _responsiveViewports) {
+        await _pumpCurrentHubScreen(tester, size: size, textScale: 2);
+
+        final hubHelp = find.byKey(const Key('hub-help-button-semantics'));
+        final viewDeals = find.widgetWithText(TextButton, 'View deals');
+        final leaveHub = find.widgetWithText(TextButton, 'Leave hub');
+        expect(
+          tester.getSemantics(hubHelp).label,
+          'How to find and join a hub',
+          reason: 'hub help is not labelled at $size',
+        );
+        expect(
+          tester.getSize(viewDeals).height,
+          greaterThanOrEqualTo(48),
+          reason: 'View deals is too small at $size',
+        );
+        expect(
+          tester.getSize(leaveHub).height,
+          greaterThanOrEqualTo(48),
+          reason: 'Leave hub is too small at $size',
+        );
+        expect(tester.takeException(), isNull, reason: 'hub overflow at $size');
+
+        await _pumpPostDealAt(tester, size: size, textScale: 2);
+        final dealHelp = find.widgetWithIcon(IconButton, Icons.help_outline);
+        final unit = find.byKey(const Key('deal-unit-field'));
+        expect(
+          find.bySemanticsLabel('How to post a deal'),
+          findsOneWidget,
+          reason: 'Post Deal help is not labelled at $size',
+        );
+        expect(
+          tester.getSize(dealHelp).shortestSide,
+          greaterThanOrEqualTo(48),
+          reason: 'Post Deal help is too small at $size',
+        );
+        expect(
+          '${tester.getSemantics(unit).label} '
+          '${tester.getSemantics(unit).value}',
+          contains('Kilograms'),
+          reason: 'selected unit is not announced at $size',
+        );
+        await tester.ensureVisible(find.byKey(const Key('deal-submit-button')));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getSize(find.byKey(const Key('deal-submit-button'))).height,
+          greaterThanOrEqualTo(48),
+          reason: 'Post Deal primary action is too small at $size',
+        );
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'Post Deal overflow at $size',
+        );
+
+        await _pumpRegisterHubAt(tester, size: size, textScale: 2);
+        await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+        await tester.pumpAndSettle();
+        expect(
+          tester.getSize(find.byKey(const Key('hub-submit-button'))).height,
+          greaterThanOrEqualTo(48),
+          reason: 'Register Hub primary action is too small at $size',
+        );
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'Register Hub overflow at $size',
+        );
+      }
+    },
+  );
 }
 
 Future<JoinHubViewModel> _pumpCurrentHubScreen(
@@ -461,3 +536,84 @@ Future<void> _pumpNarrow(WidgetTester tester, Widget child) async {
   );
   await tester.pumpAndSettle();
 }
+
+Future<void> _pumpPostDealAt(
+  WidgetTester tester, {
+  required Size size,
+  required double textScale,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  tester.platformDispatcher.textScaleFactorTestValue = textScale;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+  });
+
+  await tester.pumpWidget(
+    Provider<DealRepository>.value(
+      value: MockDealRepository(),
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.of(
+                context,
+              ).push(CreateDealScreen.route('colon', 'Colon Street Hub')),
+              child: const Text('open deal form'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open deal form'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pumpRegisterHubAt(
+  WidgetTester tester, {
+  required Size size,
+  required double textScale,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  tester.platformDispatcher.textScaleFactorTestValue = textScale;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+  });
+
+  await tester.pumpWidget(
+    MultiProvider(
+      providers: [
+        Provider<HubRepository>.value(value: _ResponsiveHubRepository()),
+        Provider<LocationService>.value(value: const _ResponsiveLocationStub()),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () =>
+                  Navigator.of(context).push(CreateHubScreen.route()),
+              child: const Text('open hub form'),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('open hub form'));
+  await tester.pumpAndSettle();
+}
+
+const _responsiveViewports = <Size>[
+  Size(320, 568),
+  Size(412, 915),
+  Size(915, 412),
+  Size(1200, 900),
+];

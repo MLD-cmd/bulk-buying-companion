@@ -199,6 +199,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('Switching…'), findsOneWidget);
+    final switching = find.widgetWithText(OutlinedButton, 'Switching…');
+    expect(tester.getSemantics(switching).label, contains('Switching'));
+    expect(tester.getSize(switching).height, greaterThanOrEqualTo(48));
     expect(find.text('Joining…'), findsNothing);
     expect(_buttonFor(tester, 'South Campus Hub', 'Switch').onPressed, isNull);
     expect(
@@ -259,6 +262,9 @@ void main() {
     expect(repository.leaveCalls, 1);
     expect(find.text('Leaving…'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    final leaving = find.widgetWithText(TextButton, 'Leaving…');
+    expect(tester.getSemantics(leaving).label, contains('Leaving'));
+    expect(tester.getSize(leaving).height, greaterThanOrEqualTo(48));
     expect(
       tester
           .widget<TextButton>(find.widgetWithText(TextButton, 'View deals'))

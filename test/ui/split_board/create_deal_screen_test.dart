@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
@@ -320,6 +321,18 @@ void main() {
 
       expect(tester.widget<IconButton>(help).onPressed, isNull);
       expect(tester.widget<FilledButton>(submitButton).onPressed, isNull);
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('deal-help-button-semantics')))
+            .flagsCollection
+            .isEnabled,
+        Tristate.isFalse,
+      );
+      expect(
+        tester.getSemantics(submitButton).flagsCollection.isEnabled,
+        Tristate.isFalse,
+      );
+      expect(tester.getSemantics(submitButton).label, contains('Publishing'));
 
       staleHelp();
       stalePublish();
@@ -582,9 +595,13 @@ void main() {
     await pumpScreen(tester, MockDealRepository());
 
     final help = find.widgetWithIcon(IconButton, Icons.help_outline);
+    final helpSemantics = find.byKey(const Key('deal-help-button-semantics'));
     expect(help, findsOneWidget);
+    expect(helpSemantics, findsOneWidget);
     expect(tester.getSize(help).width, greaterThanOrEqualTo(48));
     expect(tester.getSize(help).height, greaterThanOrEqualTo(48));
+    expect(tester.getSemantics(helpSemantics).label, 'How to post a deal');
+    expect(tester.getSemantics(helpSemantics).flagsCollection.isButton, isTrue);
 
     await tester.tap(help);
     await tester.pumpAndSettle();

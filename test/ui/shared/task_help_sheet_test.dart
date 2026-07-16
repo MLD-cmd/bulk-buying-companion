@@ -136,6 +136,59 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('task help remains operable across the viewport matrix', (
+    tester,
+  ) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final size in _responsiveViewports) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: MediaQuery(
+            data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+            child: Scaffold(
+              body: Builder(
+                builder: (context) => FilledButton(
+                  onPressed: () => showTaskHelpSheet(
+                    context,
+                    title: 'Complete this task',
+                    steps: _longSteps,
+                  ),
+                  child: const Text('Show help'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show help'));
+      await tester.pumpAndSettle();
+
+      final close = find.widgetWithText(FilledButton, 'Close');
+      expect(close, findsOneWidget, reason: 'missing Close at $size');
+      expect(
+        tester.getSize(close).height,
+        greaterThanOrEqualTo(48),
+        reason: 'Close is too small at $size',
+      );
+      expect(
+        tester.getSemantics(close).label,
+        'Close',
+        reason: 'Close is not labelled at $size',
+      );
+      expect(tester.takeException(), isNull, reason: 'overflow at $size');
+
+      await tester.tap(close);
+      await tester.pumpAndSettle();
+    }
+  });
+
   testWidgets('closing task help preserves the underlying screen state', (
     tester,
   ) async {
@@ -216,4 +269,11 @@ const _longSteps = [
     title: 'Complete the fifth task',
     body: 'Finish the final task and confirm the result.',
   ),
+];
+
+const _responsiveViewports = <Size>[
+  Size(320, 568),
+  Size(412, 915),
+  Size(915, 412),
+  Size(1200, 900),
 ];
