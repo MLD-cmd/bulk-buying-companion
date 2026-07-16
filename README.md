@@ -14,7 +14,10 @@ A Flutter application.
 
 3. Enable Email authentication in Supabase. Configure email confirmation to
    match the desired signup flow.
-4. Run `flutter pub get`, then `flutter run`.
+4. Before production, configure Supabase Auth to use your own SMTP provider
+   instead of the built-in mailer. The built-in mailer is acceptable for local
+   development only.
+5. Run `flutter pub get`, then `flutter run`.
 
 The local `.env` file is ignored by Git. The Supabase publishable/anonymous key
 is intended for client applications; never place the service-role key in this
