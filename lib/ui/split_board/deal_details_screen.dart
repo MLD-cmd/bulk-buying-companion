@@ -236,6 +236,7 @@ class DealDetailsScreen extends StatelessWidget {
       builder: (sheetContext) => _ReportSheet(
         deal: deal,
         currentUserId: viewModel.currentUserId,
+        participants: viewModel.participants,
         repository: repository,
       ),
     );
@@ -335,11 +336,13 @@ class _ReportSheet extends StatefulWidget {
   const _ReportSheet({
     required this.deal,
     required this.currentUserId,
+    required this.participants,
     required this.repository,
   });
 
   final Deal deal;
   final String? currentUserId;
+  final List<Reservation> participants;
   final ReportRepository repository;
 
   @override
@@ -349,6 +352,7 @@ class _ReportSheet extends StatefulWidget {
 class _ReportSheetState extends State<_ReportSheet> {
   final _controller = TextEditingController();
   var _targetType = ReportTargetType.deal;
+  String? _reportedUserId;
   ReportReason? _reason;
   bool _isSubmitting = false;
   String? _errorMessage;
@@ -362,9 +366,8 @@ class _ReportSheetState extends State<_ReportSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final canReportUser =
-        widget.deal.createdBy != null &&
-        widget.deal.createdBy != widget.currentUserId;
+    final reportableUsers = _reportableUsers;
+    final canReportUser = reportableUsers.isNotEmpty;
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return SafeArea(
@@ -403,8 +406,27 @@ class _ReportSheetState extends State<_ReportSheet> {
                     value: ReportTargetType.user,
                     groupValue: _targetType,
                     onChanged: _isSubmitting ? null : _setTargetType,
-                    title: const Text('Organiser'),
+                    title: const Text('Report a user'),
                   ),
+                if (_targetType == ReportTargetType.user && canReportUser) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Who are you reporting?',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  for (final participant in reportableUsers)
+                    RadioListTile<String>(
+                      key: Key('report-user-${participant.userId}'),
+                      contentPadding: EdgeInsets.zero,
+                      value: participant.userId,
+                      groupValue: _reportedUserId,
+                      onChanged: _isSubmitting ? null : _setReportedUser,
+                      title: Text(participant.displayName),
+                      subtitle: participant.isHost
+                          ? const Text('Organiser')
+                          : null,
+                    ),
+                ],
                 const SizedBox(height: 10),
                 Text('Reason', style: theme.textTheme.titleSmall),
                 for (final item in ReportReason.values)
@@ -435,7 +457,13 @@ class _ReportSheetState extends State<_ReportSheet> {
                 const SizedBox(height: 18),
                 FilledButton.icon(
                   key: const Key('submit-report-button'),
-                  onPressed: _reason == null || _isSubmitting ? null : _submit,
+                  onPressed:
+                      _reason == null ||
+                          _isSubmitting ||
+                          (_targetType == ReportTargetType.user &&
+                              _reportedUserId == null)
+                      ? null
+                      : _submit,
                   icon: _isSubmitting
                       ? const SizedBox(
                           height: 18,
@@ -457,7 +485,22 @@ class _ReportSheetState extends State<_ReportSheet> {
 
   void _setTargetType(ReportTargetType? value) {
     if (value == null) return;
-    setState(() => _targetType = value);
+    setState(() {
+      _targetType = value;
+      if (value == ReportTargetType.deal) {
+        _reportedUserId = null;
+      } else {
+        final users = _reportableUsers;
+        if (_reportedUserId == null && users.isNotEmpty) {
+          _reportedUserId = users.first.userId;
+        }
+      }
+    });
+  }
+
+  void _setReportedUser(String? value) {
+    if (value == null) return;
+    setState(() => _reportedUserId = value);
   }
 
   void _setReason(ReportReason? value) {
@@ -479,7 +522,7 @@ class _ReportSheetState extends State<_ReportSheet> {
           dealId: widget.deal.id,
           targetType: _targetType,
           reportedUserId: _targetType == ReportTargetType.user
-              ? widget.deal.createdBy
+              ? _reportedUserId
               : null,
           reason: selectedReason,
           explanation: _controller.text,
@@ -497,6 +540,35 @@ class _ReportSheetState extends State<_ReportSheet> {
         _isSubmitting = false;
       });
     }
+  }
+
+  List<Reservation> get _reportableUsers {
+    final byUserId = <String, Reservation>{};
+    for (final participant in widget.participants) {
+      byUserId.putIfAbsent(participant.userId, () => participant);
+    }
+
+    final hostId = widget.deal.createdBy;
+    final hostName = widget.deal.hostName;
+    if (hostId != null) {
+      byUserId.putIfAbsent(
+        hostId,
+        () => Reservation(
+          dealId: widget.deal.id,
+          userId: hostId,
+          studentName: hostName,
+          isHost: true,
+          reservedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        ),
+      );
+    }
+
+    final users = byUserId.values.toList();
+    users.sort((a, b) {
+      if (a.isHost != b.isHost) return a.isHost ? -1 : 1;
+      return a.displayName.compareTo(b.displayName);
+    });
+    return users;
   }
 }
 
@@ -823,7 +895,56 @@ class _ParticipantRow extends StatelessWidget {
         ),
       ],
     );
-    final controls = Wrap(
+    final controls = _ParticipantControls(
+      viewModel: viewModel,
+      participant: participant,
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 360 || textScale > 1.3) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                identity,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerLeft, child: controls),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: identity),
+              const SizedBox(width: 12),
+              controls,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ParticipantControls extends StatelessWidget {
+  const _ParticipantControls({
+    required this.viewModel,
+    required this.participant,
+  });
+
+  final DealDetailsViewModel viewModel;
+  final Reservation participant;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
       spacing: 8,
       runSpacing: 8,
       alignment: WrapAlignment.end,
