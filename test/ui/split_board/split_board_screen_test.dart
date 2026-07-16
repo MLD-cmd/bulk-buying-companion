@@ -28,6 +28,11 @@ void main() {
     );
     await tester.pump();
 
+    final search = tester.widget<TextField>(
+      find.byKey(const Key('board-search-field')),
+    );
+    expect(search.decoration?.hintText, 'Search by product name');
+    expect(search.decoration?.labelText, isNull);
     expect(find.text('Rice Sack'), findsOneWidget);
     expect(find.text('Water Case'), findsOneWidget);
 
@@ -36,6 +41,41 @@ void main() {
 
     expect(find.text('Rice Sack'), findsOneWidget);
     expect(find.text('Water Case'), findsNothing);
+  });
+
+  testWidgets('narrow board exposes secondary choices through Filters', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final viewModel = SplitBoardViewModel(
+      dealRepository: _FakeDealRepository(const [
+        _StubDeal(id: 'rice', title: 'Rice Sack'),
+      ]),
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider.value(
+        value: viewModel,
+        child: const MaterialApp(home: SplitBoardScreen(hubId: 'colon')),
+      ),
+    );
+    await tester.pump();
+
+    final filters = find.widgetWithText(OutlinedButton, 'Filters');
+    expect(filters, findsOneWidget);
+    await tester.tap(filters);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Filter deals'), findsOneWidget);
+    expect(find.text('Category'), findsOneWidget);
+    expect(find.text('Status'), findsOneWidget);
+    expect(find.text('Sort by'), findsOneWidget);
   });
 
   testWidgets('tapping a deal opens its details', (tester) async {

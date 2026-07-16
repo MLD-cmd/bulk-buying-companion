@@ -22,8 +22,9 @@ void main() {
     expect(find.text('25kg Rice Sack'), findsOneWidget);
     expect(find.text('P180/share'), findsOneWidget);
     expect(find.text('3 of 5 slots open'), findsOneWidget);
-    expect(find.text('USJR Main Gate'), findsOneWidget);
     expect(find.text('Open'), findsOneWidget);
+    expect(find.byKey(const Key('deal-card-price')), findsOneWidget);
+    expect(find.byKey(const Key('deal-card-physical-share')), findsOneWidget);
   });
 
   testWidgets('shows what each student physically gets, not just the price', (

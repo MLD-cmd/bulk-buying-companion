@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/deal.dart';
+import '../../shared/app_icon_container.dart';
+import 'deal_status_badge.dart';
 
-/// Scaffold card for a Split Board deal backed by stubbed feed data.
 class DealCard extends StatelessWidget {
   const DealCard({super.key, required this.deal});
 
@@ -12,163 +13,99 @@ class DealCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.colorScheme.outlineVariant),
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppIconContainer(
+                  icon: _categoryIcon(deal.category),
+                  semanticLabel: deal.category.label,
                 ),
-                child: const Icon(Icons.inventory_2_outlined, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      deal.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        deal.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      deal.priceLabel,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: theme.colorScheme.primary,
+                      const SizedBox(height: 3),
+                      Text(
+                        deal.category.label,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${deal.physicalShare.shareLabel} each',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              deal.priceLabel,
+              key: const Key('deal-card-price'),
+              style: theme.textTheme.titleLarge?.copyWith(
+                color: theme.colorScheme.primary,
+                fontSize: 23,
               ),
-              const SizedBox(width: 10),
-              _StatusBadge(deal: deal),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _InfoChip(
-                icon: Icons.group_outlined,
-                label: deal.availableSlotsLabel,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${deal.physicalShare.shareLabel} each',
+              key: const Key('deal-card-physical-share'),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              _InfoChip(
-                icon: Icons.category_outlined,
-                label: deal.category.label,
-              ),
-              _InfoChip(
-                icon: Icons.schedule_outlined,
-                label: deal.deadlineLabel,
-              ),
-              _InfoChip(icon: Icons.place_outlined, label: deal.pickupLocation),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.deal});
-
-  final Deal deal;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = _statusColors(theme);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: colors.background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        deal.statusLabel,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: colors.foreground,
-          fontWeight: FontWeight.w700,
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: DealStatusBadge(deal: deal),
+            ),
+            const SizedBox(height: 14),
+            const Divider(),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                _Metadata(
+                  icon: Icons.group_outlined,
+                  label: deal.availableSlotsLabel,
+                ),
+                _Metadata(
+                  icon: Icons.schedule_outlined,
+                  label: deal.deadlineLabel,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
-
-  _BadgeColors _statusColors(ThemeData theme) {
-    if (deal.isFillingFast) {
-      return _BadgeColors(
-        background: theme.colorScheme.tertiaryContainer,
-        foreground: theme.colorScheme.onTertiaryContainer,
-      );
-    }
-    return switch (deal.status) {
-      DealStatus.open => _BadgeColors(
-        background: theme.colorScheme.primaryContainer,
-        foreground: theme.colorScheme.onPrimaryContainer,
-      ),
-      // Full and Filling fast sit next to each other on the same board, so they
-      // cannot share a tone: this one means "you cannot join this".
-      DealStatus.full => _BadgeColors(
-        background: theme.colorScheme.errorContainer,
-        foreground: theme.colorScheme.onErrorContainer,
-      ),
-      // The two states where the deal is waiting on the host, not the student.
-      DealStatus.readyToPurchase ||
-      DealStatus.readyForPickup => _BadgeColors(
-        background: theme.colorScheme.secondaryContainer,
-        foreground: theme.colorScheme.onSecondaryContainer,
-      ),
-      DealStatus.completed => _BadgeColors(
-        background: theme.colorScheme.surfaceContainerHighest,
-        foreground: theme.colorScheme.onSurfaceVariant,
-      ),
-      // Shares Full's tone, but the labels differ and the board hides cancelled
-      // deals by default, so the two never sit side by side.
-      DealStatus.cancelled => _BadgeColors(
-        background: theme.colorScheme.errorContainer,
-        foreground: theme.colorScheme.onErrorContainer,
-      ),
-    };
-  }
 }
 
-class _InfoChip extends StatelessWidget {
-  const _InfoChip({required this.icon, required this.label});
+IconData _categoryIcon(DealCategory category) {
+  return switch (category) {
+    DealCategory.grocery => Icons.local_grocery_store_outlined,
+    DealCategory.household => Icons.cleaning_services_outlined,
+    DealCategory.drinks => Icons.local_drink_outlined,
+    DealCategory.pantry => Icons.kitchen_outlined,
+  };
+}
+
+class _Metadata extends StatelessWidget {
+  const _Metadata({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -176,38 +113,21 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
-}
-
-class _BadgeColors {
-  const _BadgeColors({required this.background, required this.foreground});
-
-  final Color background;
-  final Color foreground;
 }
