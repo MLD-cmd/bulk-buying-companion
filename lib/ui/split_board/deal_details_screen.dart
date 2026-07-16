@@ -955,29 +955,6 @@ class _ParticipantControls extends StatelessWidget {
           _CollectedControl(viewModel: viewModel, participant: participant),
       ],
     );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 520 || textScale > 1.3) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              identity,
-              const SizedBox(height: 6),
-              Align(alignment: Alignment.centerRight, child: controls),
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(child: identity),
-            const SizedBox(width: 12),
-            controls,
-          ],
-        );
-      },
-    );
   }
 }
 
