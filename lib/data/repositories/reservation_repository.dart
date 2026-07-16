@@ -488,7 +488,7 @@ class MockReservationRepository
           (userId) => Reservation(
             dealId: dealId,
             userId: userId,
-            studentName: userId == _deal.createdBy ? 'Marco Villanueva' : null,
+            studentName: _displayNameFor(userId),
             isHost: userId == _deal.createdBy,
             reservedAt: DateTime(2026, 7, 14),
             paidAt: _paid.contains(userId) ? DateTime(2026, 7, 14) : null,
@@ -498,6 +498,13 @@ class MockReservationRepository
           ),
         )
         .toList();
+  }
+
+  String? _displayNameFor(String userId) {
+    if (userId == _deal.createdBy) return _deal.hostName ?? 'Marco Villanueva';
+    if (userId == 'user-2') return 'Jayrald B. Tajanlangit';
+    if (userId.trim().isEmpty) return null;
+    return userId;
   }
 
   @override
