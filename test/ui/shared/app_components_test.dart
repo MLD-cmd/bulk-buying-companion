@@ -21,6 +21,159 @@ void main() {
     );
   });
 
+  testWidgets('AppBanner exposes a responsive retry action', (tester) async {
+    var retries = 0;
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: Scaffold(
+            body: AppBanner.error(
+              message: 'Couldn’t refresh deals. Showing saved deals.',
+              actionLabel: 'Try again',
+              onAction: () => retries++,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final retryButton = find.widgetWithText(TextButton, 'Try again');
+    expect(retryButton, findsOneWidget);
+    expect(tester.getSemantics(retryButton).label, contains('Try again'));
+
+    await tester.tap(retryButton);
+
+    expect(retries, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('AppBanner stacks its action below 360dp at normal text', (
+    tester,
+  ) async {
+    await _pumpGeometryBanner(tester, width: 359, textScale: 1);
+
+    final messageBottom = tester
+        .getBottomLeft(find.text(_geometryBannerMessage))
+        .dy;
+    final actionTop = tester.getTopLeft(find.byType(TextButton)).dy;
+
+    expect(actionTop, greaterThanOrEqualTo(messageBottom + 4));
+  });
+
+  testWidgets('AppBanner stacks its action above 1.3 text scale when wide', (
+    tester,
+  ) async {
+    await _pumpGeometryBanner(tester, width: 500, textScale: 1.31);
+
+    final messageBottom = tester
+        .getBottomLeft(find.text(_geometryBannerMessage))
+        .dy;
+    final actionTop = tester.getTopLeft(find.byType(TextButton)).dy;
+
+    expect(actionTop, greaterThanOrEqualTo(messageBottom + 4));
+  });
+
+  testWidgets('AppBanner keeps its action inline at the width boundary', (
+    tester,
+  ) async {
+    await _pumpGeometryBanner(tester, width: 360, textScale: 1);
+
+    final messageTop = tester.getTopLeft(find.text(_geometryBannerMessage)).dy;
+    final actionTop = tester.getTopLeft(find.byType(TextButton)).dy;
+
+    expect(actionTop, moreOrLessEquals(messageTop));
+  });
+
+  test('AppBanner rejects incomplete or impossible action states', () {
+    void action() {}
+
+    expect(
+      () => AppBanner(
+        message: 'Saved deals are available.',
+        tone: AppBannerTone.notice,
+        icon: Icons.info_outline,
+        actionLabel: 'Retry',
+      ),
+      throwsAssertionError,
+    );
+    expect(
+      () => AppBanner.error(
+        message: 'Could not refresh deals.',
+        onAction: action,
+      ),
+      throwsAssertionError,
+    );
+    expect(
+      () => AppBanner.notice(
+        message: 'Saved deals are available.',
+        actionBusy: true,
+      ),
+      throwsAssertionError,
+    );
+    expect(
+      () => AppBanner.success(
+        message: 'Deals refreshed.',
+        actionLabel: 'Refresh',
+      ),
+      throwsAssertionError,
+    );
+    expect(
+      () => AppBanner.error(
+        message: 'Could not refresh deals.',
+        actionLabel: 'Retry',
+        onAction: action,
+        actionBusy: true,
+      ),
+      returnsNormally,
+    );
+  });
+
+  testWidgets('AppBanner disables a busy action and shows progress', (
+    tester,
+  ) async {
+    var retries = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AppBanner.error(
+            message: 'Couldn’t refresh deals.',
+            actionLabel: 'Try again',
+            onAction: () => retries++,
+            actionBusy: true,
+          ),
+        ),
+      ),
+    );
+
+    final action = tester.widget<TextButton>(find.byType(TextButton));
+    final progress = tester.widget<SizedBox>(
+      find
+          .ancestor(
+            of: find.byType(CircularProgressIndicator),
+            matching: find.byType(SizedBox),
+          )
+          .first,
+    );
+
+    expect(action.onPressed, isNull);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(
+      tester.getSemantics(find.byType(TextButton)).label,
+      contains('Try again'),
+    );
+    expect(progress.width, 18);
+    expect(progress.height, 18);
+    await tester.tap(find.byType(TextButton));
+    expect(retries, 0);
+  });
+
   testWidgets('AppMessageState exposes an optional retry action', (
     tester,
   ) async {
@@ -66,3 +219,33 @@ void main() {
     expect(find.text('Product name field'), findsOneWidget);
   });
 }
+
+const _geometryBannerMessage = 'Saved deals are available.';
+
+Future<void> _pumpGeometryBanner(
+  WidgetTester tester, {
+  required double width,
+  required double textScale,
+}) async {
+  tester.view.physicalSize = Size(width, 640);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await tester.pumpWidget(
+    MaterialApp(
+      home: MediaQuery(
+        data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+        child: Scaffold(
+          body: AppBanner.error(
+            message: _geometryBannerMessage,
+            actionLabel: 'Retry',
+            onAction: _emptyAction,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+void _emptyAction() {}
