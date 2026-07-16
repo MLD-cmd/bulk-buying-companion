@@ -999,7 +999,7 @@ class _PaidControl extends StatelessWidget {
       );
     }
 
-    return TextButton(
+    return OutlinedButton.icon(
       key: Key('mark-paid-${participant.userId}'),
       onPressed: viewModel.isUpdating
           ? null
@@ -1007,10 +1007,12 @@ class _PaidControl extends StatelessWidget {
               participant.userId,
               paid: !participant.hasPaid,
             ),
-      child: _StateChip(
-        label: participant.hasPaid ? 'Paid' : 'Mark paid',
-        on: participant.hasPaid,
+      icon: Icon(
+        participant.hasPaid
+            ? Icons.remove_done_outlined
+            : Icons.check_circle_outline,
       ),
+      label: Text(participant.hasPaid ? 'Unmark paid' : 'Mark paid'),
     );
   }
 }
@@ -1031,7 +1033,7 @@ class _CollectedControl extends StatelessWidget {
       );
     }
 
-    return TextButton(
+    return OutlinedButton.icon(
       key: Key('mark-collected-${participant.userId}'),
       onPressed: viewModel.isUpdating
           ? null
@@ -1039,9 +1041,13 @@ class _CollectedControl extends StatelessWidget {
               participant.userId,
               collected: !participant.hasCollected,
             ),
-      child: _StateChip(
-        label: participant.hasCollected ? 'Collected' : 'Mark collected',
-        on: participant.hasCollected,
+      icon: Icon(
+        participant.hasCollected
+            ? Icons.undo_outlined
+            : Icons.inventory_2_outlined,
+      ),
+      label: Text(
+        participant.hasCollected ? 'Unmark collected' : 'Mark collected',
       ),
     );
   }
