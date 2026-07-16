@@ -129,6 +129,64 @@ void main() {
     );
   });
 
+  test('notifies a participant when their item is marked collected', () {
+    final notifications = DealNotificationBuilder().build(
+      currentUserId: 'ana',
+      deals: [_deal(purchasedAt: _now)],
+      participantsByDeal: {
+        'rice': [
+          _reservation(userId: 'host', isHost: true, paidAt: _now),
+          _reservation(userId: 'ana', paidAt: _now, collectedAt: _now),
+        ],
+      },
+    );
+
+    expect(
+      notifications,
+      contains(
+        isA<DealNotification>()
+            .having(
+              (item) => item.kind,
+              'kind',
+              DealNotificationKind.itemCollected,
+            )
+            .having((item) => item.title, 'title', 'Item collected')
+            .having(
+              (item) => item.message,
+              'message',
+              'Rice Sack has been marked collected.',
+            ),
+      ),
+    );
+    expect(
+      notifications.map((notification) => notification.kind),
+      isNot(contains(DealNotificationKind.pickupReminder)),
+    );
+  });
+
+  test('does not notify the host when their own share is auto-collected', () {
+    final notifications = DealNotificationBuilder().build(
+      currentUserId: 'host',
+      deals: [_deal(purchasedAt: _now)],
+      participantsByDeal: {
+        'rice': [
+          _reservation(
+            userId: 'host',
+            isHost: true,
+            paidAt: _now,
+            collectedAt: _now,
+          ),
+          _reservation(userId: 'ana', paidAt: _now),
+        ],
+      },
+    );
+
+    expect(
+      notifications.map((notification) => notification.kind),
+      isNot(contains(DealNotificationKind.itemCollected)),
+    );
+  });
+
   test('notifies participants when a deal is cancelled', () {
     final notifications = DealNotificationBuilder().build(
       currentUserId: 'ana',

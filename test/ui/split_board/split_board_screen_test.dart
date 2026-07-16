@@ -214,6 +214,11 @@ class _FakeDealRepository implements DealRepository {
   Future<List<Deal>> getDeals(String hubId) async => _deals;
 
   @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
   Future<Deal> createDeal(DealDraft draft) {
     throw UnimplementedError();
   }

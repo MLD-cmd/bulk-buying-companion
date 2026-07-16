@@ -125,6 +125,42 @@ void main() {
     expect(published.status, DealStatus.open);
   });
 
+  testWidgets('student can add manual payment instructions to the deal', (
+    tester,
+  ) async {
+    final repository = _CapturingDealRepository();
+    await pumpScreen(tester, repository);
+
+    await fillForm(tester);
+    await tester.enterText(
+      find.byKey(const Key('deal-payment-method-field')),
+      'GCash',
+    );
+    await tester.enterText(
+      find.byKey(const Key('deal-payment-account-name-field')),
+      'Marco Villanueva',
+    );
+    await tester.enterText(
+      find.byKey(const Key('deal-payment-account-handle-field')),
+      '09171234567',
+    );
+    await tester.enterText(
+      find.byKey(const Key('deal-payment-instructions-field')),
+      'Send a screenshot after paying.',
+    );
+
+    await submit(tester);
+
+    expect(repository.createdDraft, isNotNull);
+    expect(repository.createdDraft!.paymentMethod, 'GCash');
+    expect(repository.createdDraft!.paymentAccountName, 'Marco Villanueva');
+    expect(repository.createdDraft!.paymentAccountHandle, '09171234567');
+    expect(
+      repository.createdDraft!.paymentInstructions,
+      'Send a screenshot after paying.',
+    );
+  });
+
   testWidgets('shows the per-share price before publishing', (tester) async {
     await pumpScreen(tester, MockDealRepository());
 
@@ -263,15 +299,60 @@ class _RecordingDealRepository implements DealRepository {
   Future<List<Deal>> getDeals(String hubId) async => const [];
 
   @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
   Future<Deal> createDeal(DealDraft draft) async {
     createCalls++;
     throw UnimplementedError();
   }
 }
 
+class _CapturingDealRepository implements DealRepository {
+  DealDraft? createdDraft;
+
+  @override
+  Future<List<Deal>> getDeals(String hubId) async => const [];
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
+  Future<Deal> createDeal(DealDraft draft) async {
+    createdDraft = draft;
+    return Deal(
+      id: 'captured',
+      hubId: draft.hubId,
+      title: draft.title,
+      description: draft.description,
+      category: draft.category,
+      totalPrice: draft.totalPrice,
+      amount: draft.amount,
+      unit: draft.unit,
+      availableSlots: draft.totalSlots - 1,
+      totalSlots: draft.totalSlots,
+      pickupLocation: draft.pickupLocation,
+      paymentMethod: draft.paymentMethod,
+      paymentAccountName: draft.paymentAccountName,
+      paymentAccountHandle: draft.paymentAccountHandle,
+      paymentInstructions: draft.paymentInstructions,
+      paidCount: 1,
+    );
+  }
+}
+
 class _RefusingDealRepository implements DealRepository {
   @override
   Future<List<Deal>> getDeals(String hubId) async => const [];
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
 
   @override
   Future<Deal> createDeal(DealDraft draft) {

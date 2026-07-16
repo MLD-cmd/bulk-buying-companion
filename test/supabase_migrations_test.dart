@@ -53,6 +53,22 @@ void main() {
       );
     });
 
+    test('deal participant names fall back when display names are missing', () {
+      final all = allMigrations();
+
+      expect(all, contains("split_part(p.email, '@', 1)"));
+      expect(all, contains('as student_name'));
+      expect(all, contains('as host_name'));
+    });
+
+    test('existing auth users with missing profiles are backfilled', () {
+      final all = allMigrations();
+
+      expect(all, contains('from auth.users u'));
+      expect(all, contains('insert into public.profiles'));
+      expect(all, contains('where not exists'));
+    });
+
     test('rejects sub-centavo deal prices in schema source', () {
       final all = allMigrations();
 

@@ -35,7 +35,8 @@ void main() {
     final totals = <int>[
       for (var centavos = 1; centavos <= 200; centavos++) centavos,
       for (var pesos = 1; pesos <= 5000; pesos += 7) pesos * 100 + 1,
-      for (var pesos = 100000; pesos <= 1000000; pesos += 33333) pesos * 100 - 1,
+      for (var pesos = 100000; pesos <= 1000000; pesos += 33333)
+        pesos * 100 - 1,
     ];
 
     for (final centavos in totals) {
@@ -72,7 +73,10 @@ void main() {
   });
 
   test('rejects a split with no slots to split across', () {
-    expect(() => CostSplit.from(totalPrice: 900, slots: 0), throwsArgumentError);
+    expect(
+      () => CostSplit.from(totalPrice: 900, slots: 0),
+      throwsArgumentError,
+    );
   });
 
   test('a deal that does not divide evenly rounds its share up', () {
@@ -110,14 +114,20 @@ void main() {
   test('rejects a total so large the centavo arithmetic would overflow', () {
     // (1e30 * 100).round() saturates at the int64 ceiling, and the ceiling
     // division then wraps negative — the shares would stop covering the total.
-    expect(() => CostSplit.from(totalPrice: 1e30, slots: 5), throwsArgumentError);
+    expect(
+      () => CostSplit.from(totalPrice: 1e30, slots: 5),
+      throwsArgumentError,
+    );
 
     // The boundary itself still splits correctly.
     final atLimit = CostSplit.from(
       totalPrice: CostSplit.maxTotalPrice,
       slots: 7,
     );
-    expect(atLimit.collectedCentavos, greaterThanOrEqualTo(atLimit.totalCentavos));
+    expect(
+      atLimit.collectedCentavos,
+      greaterThanOrEqualTo(atLimit.totalCentavos),
+    );
     expect(atLimit.perShareCentavos, greaterThan(0));
   });
 

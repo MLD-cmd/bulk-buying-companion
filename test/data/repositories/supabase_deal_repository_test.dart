@@ -21,6 +21,10 @@ void main() {
             'available_slots': 3,
             'total_slots': 5,
             'pickup_location': 'USJR Main Gate',
+            'payment_method': 'GCash',
+            'payment_account_name': 'Marco Villanueva',
+            'payment_account_handle': '09171234567',
+            'payment_instructions': 'Send a screenshot after paying.',
             'closes_at': '2026-07-16T15:59:00.000Z',
             'created_by': 'user-9',
             'host_name': 'Marco Villanueva',
@@ -39,6 +43,11 @@ void main() {
     expect(deals.single.totalPrice, 900);
     expect(deals.single.status, DealStatus.open);
     expect(deals.single.priceLabel, 'P180/share');
+    expect(deals.single.paymentMethod, 'GCash');
+    expect(deals.single.paymentAccountName, 'Marco Villanueva');
+    expect(deals.single.paymentAccountHandle, '09171234567');
+    expect(deals.single.paymentInstructions, 'Send a screenshot after paying.');
+    expect(deals.single.hasPaymentInfo, isTrue);
     expect(deals.single.closesAt, isNotNull);
     // host_name only exists on the deal_feed view, not the deals table.
     expect(deals.single.createdBy, 'user-9');
@@ -161,6 +170,10 @@ void main() {
         unit: DealUnit.litre,
         totalSlots: 5,
         pickupLocation: 'USJR Main Gate',
+        paymentMethod: '  GCash  ',
+        paymentAccountName: '  Marco Villanueva  ',
+        paymentAccountHandle: '  09171234567  ',
+        paymentInstructions: '  Send a screenshot after paying.  ',
       ),
     );
 
@@ -170,6 +183,13 @@ void main() {
     expect(gateway.insertedValues!['category'], 'pantry');
     expect(gateway.insertedValues!['amount'], 5);
     expect(gateway.insertedValues!['unit'], 'litre');
+    expect(gateway.insertedValues!['payment_method'], 'GCash');
+    expect(gateway.insertedValues!['payment_account_name'], 'Marco Villanueva');
+    expect(gateway.insertedValues!['payment_account_handle'], '09171234567');
+    expect(
+      gateway.insertedValues!['payment_instructions'],
+      'Send a screenshot after paying.',
+    );
     // status is not sent either: it is derived from the deal's facts, and the
     // column it used to be written to is going away.
     expect(gateway.insertedValues!.containsKey('status'), isFalse);

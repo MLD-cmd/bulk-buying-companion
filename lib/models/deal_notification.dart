@@ -6,6 +6,7 @@ enum DealNotificationKind {
   dealFull,
   paymentReminder,
   pickupReminder,
+  itemCollected,
   cancellation,
 }
 
@@ -53,6 +54,21 @@ class DealNotificationBuilder {
           ),
         );
         continue;
+      }
+
+      if (currentReservation != null &&
+          !currentReservation.isHost &&
+          currentReservation.hasCollected &&
+          deal.status != DealStatus.cancelled) {
+        notifications.add(
+          DealNotification(
+            id: '${deal.id}-collected',
+            dealId: deal.id,
+            kind: DealNotificationKind.itemCollected,
+            title: 'Item collected',
+            message: '${deal.title} has been marked collected.',
+          ),
+        );
       }
 
       if (isHost) {
@@ -139,10 +155,11 @@ class DealNotificationBuilder {
   int _priority(DealNotificationKind kind) {
     return switch (kind) {
       DealNotificationKind.cancellation => 0,
-      DealNotificationKind.pickupReminder => 1,
-      DealNotificationKind.paymentReminder => 2,
-      DealNotificationKind.dealFull => 3,
-      DealNotificationKind.reservationUpdate => 4,
+      DealNotificationKind.itemCollected => 1,
+      DealNotificationKind.pickupReminder => 2,
+      DealNotificationKind.paymentReminder => 3,
+      DealNotificationKind.dealFull => 4,
+      DealNotificationKind.reservationUpdate => 5,
     };
   }
 }

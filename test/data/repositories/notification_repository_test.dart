@@ -85,7 +85,9 @@ void main() {
       invalidations.add(null);
 
       expect(await iterator.moveNext(), isTrue);
-      expect(iterator.current, isEmpty);
+      expect(iterator.current.map((item) => item.kind), [
+        DealNotificationKind.itemCollected,
+      ]);
     },
   );
 }
@@ -144,6 +146,11 @@ class _DealStub implements DealRepository {
 
   @override
   Future<List<Deal>> getDeals(String hubId) async => deals;
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
 }
 
 class _ReservationStub implements ReservationRepository {

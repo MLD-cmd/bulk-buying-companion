@@ -89,6 +89,11 @@ class DealDetailsScreen extends StatelessWidget {
                           ],
                           const SizedBox(height: 24),
                           _CostCard(deal: deal),
+                          if (viewModel.isHost || viewModel.holdsSlot) ...[
+                            const SizedBox(height: 24),
+                            const _SectionLabel('Payment'),
+                            _PaymentInfo(deal: deal),
+                          ],
                           const SizedBox(height: 24),
                           const _SectionLabel('Slots'),
                           _SlotsRow(deal: deal),
@@ -285,6 +290,70 @@ class _LifecycleActions extends StatelessWidget {
   }
 }
 
+class _PaymentInfo extends StatelessWidget {
+  const _PaymentInfo({required this.deal});
+
+  final Deal deal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DetailRow(
+          icon: Icons.payments_outlined,
+          label: 'Amount owed: ${formatPeso(deal.pricePerShare)}',
+          keyValue: const Key('detail-payment-amount'),
+        ),
+        if (deal.hasPaymentInfo) ...[
+          if (_hasText(deal.paymentMethod)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.account_balance_wallet_outlined,
+              label: deal.paymentMethod!.trim(),
+              keyValue: const Key('detail-payment-method'),
+            ),
+          ],
+          if (_hasText(deal.paymentAccountName)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.badge_outlined,
+              label: deal.paymentAccountName!.trim(),
+              keyValue: const Key('detail-payment-account-name'),
+            ),
+          ],
+          if (_hasText(deal.paymentAccountHandle)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.tag_outlined,
+              label: deal.paymentAccountHandle!.trim(),
+              keyValue: const Key('detail-payment-account-handle'),
+            ),
+          ],
+          if (_hasText(deal.paymentInstructions)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.notes_outlined,
+              label: deal.paymentInstructions!.trim(),
+              keyValue: const Key('detail-payment-instructions'),
+            ),
+          ],
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'No payment instructions added yet.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _CostCard extends StatelessWidget {
   const _CostCard({required this.deal});
 
@@ -392,6 +461,8 @@ class _CostCard extends StatelessWidget {
     );
   }
 }
+
+bool _hasText(String? value) => value?.trim().isNotEmpty == true;
 
 class _SlotsRow extends StatelessWidget {
   const _SlotsRow({required this.deal});

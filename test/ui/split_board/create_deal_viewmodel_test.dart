@@ -24,6 +24,27 @@ void main() {
       );
     });
 
+    test('accepts optional payment details but caps their length', () {
+      expect(viewModel.validatePaymentMethod(null), isNull);
+      expect(viewModel.validatePaymentMethod('GCash'), isNull);
+      expect(
+        viewModel.validatePaymentMethod('x' * 41),
+        'Keep the payment method under 40 characters.',
+      );
+      expect(
+        viewModel.validatePaymentAccountName('x' * 81),
+        'Keep the account name under 80 characters.',
+      );
+      expect(
+        viewModel.validatePaymentAccountHandle('x' * 81),
+        'Keep the account number or handle under 80 characters.',
+      );
+      expect(
+        viewModel.validatePaymentInstructions('x' * 181),
+        'Keep the payment instructions under 180 characters.',
+      );
+    });
+
     test('rejects a price that is not a positive number', () {
       expect(viewModel.validateTotalPrice(''), 'Enter the total price.');
       expect(
@@ -77,13 +98,12 @@ void main() {
 
     test('previews the per-share price only once the inputs are usable', () {
       expect(
-        viewModel.previewSplit(totalPrice: '900', totalSlots: '5')?.pricePerShare,
+        viewModel
+            .previewSplit(totalPrice: '900', totalSlots: '5')
+            ?.pricePerShare,
         180,
       );
-      expect(
-        viewModel.previewSplit(totalPrice: '900', totalSlots: ''),
-        isNull,
-      );
+      expect(viewModel.previewSplit(totalPrice: '900', totalSlots: ''), isNull);
       expect(
         viewModel.previewSplit(totalPrice: '900', totalSlots: '0'),
         isNull,
@@ -108,7 +128,10 @@ void main() {
     });
 
     test('a one-way split is not previewed, since submit would reject it', () {
-      expect(viewModel.previewSplit(totalPrice: '900', totalSlots: '1'), isNull);
+      expect(
+        viewModel.previewSplit(totalPrice: '900', totalSlots: '1'),
+        isNull,
+      );
       expect(
         viewModel.validateTotalSlots('1', amount: '25', unit: DealUnit.kg),
         isNotNull,
@@ -350,6 +373,11 @@ class _RefusingDealRepository implements DealRepository {
   Future<List<Deal>> getDeals(String hubId) async => const [];
 
   @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
   Future<Deal> createDeal(DealDraft draft) {
     throw const DealFailure(
       'You do not have permission to post a deal in this hub.',
@@ -360,6 +388,11 @@ class _RefusingDealRepository implements DealRepository {
 class _CrashingDealRepository implements DealRepository {
   @override
   Future<List<Deal>> getDeals(String hubId) async => const [];
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
 
   @override
   Future<Deal> createDeal(DealDraft draft) {

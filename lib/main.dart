@@ -33,6 +33,7 @@ Future<void> main() async {
     gateway: PostgrestSupabaseDealGateway(client),
     // Read lazily: the student is not signed in yet when the app boots.
     currentUserId: () => client.auth.currentUser!.id,
+    invalidationSource: SupabaseDealInvalidationSource(client),
   );
   final reservationRepository = SupabaseReservationRepository(
     gateway: PostgrestSupabaseReservationGateway(client),

@@ -184,6 +184,11 @@ class _DealHistoryRepository implements DealRepository {
 
   @override
   Future<List<Deal>> getDeals(String hubId) async => deals;
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
 }
 
 class _ReservationHistoryRepository implements ReservationRepository {

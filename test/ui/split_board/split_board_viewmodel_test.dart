@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
@@ -20,7 +22,7 @@ void main() {
 
     expect(viewModel.isLoading, isTrue);
     expect(viewModel.hubName, 'Colon Street Hub');
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.isLoading, isFalse);
     expect(viewModel.deals, hasLength(2));
@@ -33,7 +35,7 @@ void main() {
       hubId: 'empty',
       hubName: 'Empty Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.deals, isEmpty);
     expect(viewModel.hasError, isFalse);
@@ -48,7 +50,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
     expect(repository.getDealsCalls, 1);
 
     await viewModel.refresh();
@@ -65,7 +67,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.hasError, isTrue);
     expect(viewModel.deals, isEmpty);
@@ -87,7 +89,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     viewModel.updateSearchQuery('rice');
 
@@ -121,7 +123,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     viewModel.updateCategoryFilter(DealCategory.grocery);
     viewModel.updateStatusFilter(DealStatus.full);
@@ -145,7 +147,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.filteredDeals.map((deal) => deal.id), ['a']);
 
@@ -181,7 +183,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     viewModel.updateSortOption(DealSortOption.deadline);
 
@@ -200,51 +202,54 @@ void main() {
     ]);
   });
 
-  test('sorts by price on the real per-share number, not a formatted string', () async {
-    // 100 / 3 rounds up to P33.34/share; 100 / 4 is an exact P25.00/share.
-    // A regex over the formatted label would still parse both correctly, so
-    // this is a regression guard for the refactor away from that regex.
-    final viewModel = SplitBoardViewModel(
-      dealRepository: _FakeDealRepository({
-        'colon': [
-          const Deal(
-            id: 'thirds',
-            hubId: 'colon',
-            title: 'Thirds Deal',
-            category: DealCategory.grocery,
-            totalPrice: 100,
-            amount: 1,
-            unit: DealUnit.kg,
-            availableSlots: 1,
-            totalSlots: 3,
-            pickupLocation: 'Campus Gate',
-          ),
-          const Deal(
-            id: 'quarters',
-            hubId: 'colon',
-            title: 'Quarters Deal',
-            category: DealCategory.grocery,
-            totalPrice: 100,
-            amount: 1,
-            unit: DealUnit.kg,
-            availableSlots: 1,
-            totalSlots: 4,
-            pickupLocation: 'Campus Gate',
-          ),
-        ],
-      }),
-      hubId: 'colon',
-      hubName: 'Colon Street Hub',
-    );
-    await Future<void>.value();
+  test(
+    'sorts by price on the real per-share number, not a formatted string',
+    () async {
+      // 100 / 3 rounds up to P33.34/share; 100 / 4 is an exact P25.00/share.
+      // A regex over the formatted label would still parse both correctly, so
+      // this is a regression guard for the refactor away from that regex.
+      final viewModel = SplitBoardViewModel(
+        dealRepository: _FakeDealRepository({
+          'colon': [
+            const Deal(
+              id: 'thirds',
+              hubId: 'colon',
+              title: 'Thirds Deal',
+              category: DealCategory.grocery,
+              totalPrice: 100,
+              amount: 1,
+              unit: DealUnit.kg,
+              availableSlots: 1,
+              totalSlots: 3,
+              pickupLocation: 'Campus Gate',
+            ),
+            const Deal(
+              id: 'quarters',
+              hubId: 'colon',
+              title: 'Quarters Deal',
+              category: DealCategory.grocery,
+              totalPrice: 100,
+              amount: 1,
+              unit: DealUnit.kg,
+              availableSlots: 1,
+              totalSlots: 4,
+              pickupLocation: 'Campus Gate',
+            ),
+          ],
+        }),
+        hubId: 'colon',
+        hubName: 'Colon Street Hub',
+      );
+      await pumpEventQueue();
 
-    viewModel.updateSortOption(DealSortOption.price);
+      viewModel.updateSortOption(DealSortOption.price);
 
-    expect(viewModel.filteredDeals.map((deal) => deal.id), [
-      'quarters',
-      'thirds',
-    ]);
-  });
+      expect(viewModel.filteredDeals.map((deal) => deal.id), [
+        'quarters',
+        'thirds',
+      ]);
+    },
+  );
 
   test('replaces a deal when its slot count changes', () async {
     const rice = Deal(
@@ -284,6 +289,31 @@ void main() {
     );
 
     expect(viewModel.filteredDeals.single.availableSlots, 3);
+  });
+
+  test('updates when the hub deal stream emits a new posted deal', () async {
+    final repository = _StreamingDealRepository(
+      initialDeals: const [_StubDeal(id: 'rice', title: 'Rice Sack')],
+    );
+    addTearDown(repository.dispose);
+    final viewModel = SplitBoardViewModel(
+      dealRepository: repository,
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+    addTearDown(viewModel.dispose);
+    await pumpEventQueue();
+
+    repository.emit(const [
+      _StubDeal(id: 'beans', title: 'Coffee Beans'),
+      _StubDeal(id: 'rice', title: 'Rice Sack'),
+    ]);
+    await pumpEventQueue();
+
+    expect(viewModel.deals.map((deal) => deal.title), [
+      'Coffee Beans',
+      'Rice Sack',
+    ]);
   });
 }
 
@@ -327,7 +357,30 @@ class _FakeDealRepository implements DealRepository {
   }
 
   @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
   Future<Deal> createDeal(DealDraft draft) {
     throw UnimplementedError();
   }
+}
+
+class _StreamingDealRepository extends _FakeDealRepository {
+  _StreamingDealRepository({required List<Deal> initialDeals})
+    : _controller = StreamController<List<Deal>>.broadcast(),
+      super({'colon': initialDeals});
+
+  final StreamController<List<Deal>> _controller;
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) => _controller.stream;
+
+  void emit(List<Deal> deals) {
+    _dealsByHub['colon'] = deals;
+    _controller.add(deals);
+  }
+
+  Future<void> dispose() => _controller.close();
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/deal_repository.dart';
@@ -12,11 +14,14 @@ class SplitBoardViewModel extends ChangeNotifier {
     required this.hubName,
   }) : _dealRepository = dealRepository,
        _hubId = hubId {
-    _load();
+    _subscription = _dealRepository
+        .watchDeals(_hubId)
+        .listen(_setDeals, onError: (_) => _setError());
   }
 
   final DealRepository _dealRepository;
   final String _hubId;
+  late final StreamSubscription<List<Deal>> _subscription;
 
   /// Name of the hub whose deals are shown, used in the screen header.
   final String hubName;
@@ -66,20 +71,6 @@ class SplitBoardViewModel extends ChangeNotifier {
       _searchQuery.trim().isNotEmpty ||
       _categoryFilter != null ||
       _statusFilter != null;
-
-  Future<void> _load() async {
-    _isLoading = true;
-    _hasError = false;
-    notifyListeners();
-
-    try {
-      _deals = await _dealRepository.getDeals(_hubId);
-    } catch (_) {
-      _hasError = true;
-    }
-    _isLoading = false;
-    notifyListeners();
-  }
 
   /// Re-fetches the hub's deals. Wired to both the pull-to-refresh gesture
   /// and the retry action on the error state.
@@ -142,6 +133,25 @@ class SplitBoardViewModel extends ChangeNotifier {
     _searchQuery = '';
     _categoryFilter = null;
     _statusFilter = null;
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+
+  void _setDeals(List<Deal> deals) {
+    _deals = deals;
+    _hasError = false;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  void _setError() {
+    _hasError = true;
+    _isLoading = false;
     notifyListeners();
   }
 

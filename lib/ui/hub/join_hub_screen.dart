@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/notification_repository.dart';
+import '../../models/deal_notification.dart';
 import '../notifications/notifications_screen.dart';
 import '../profile/profile_screen.dart';
 import '../shared/app_banner.dart';
@@ -25,13 +30,7 @@ class JoinHubScreen extends StatelessWidget {
               final hub = viewModel.joinedHub;
               if (hub == null) return const SizedBox.shrink();
 
-              return IconButton(
-                icon: const Icon(Icons.notifications_none_outlined),
-                tooltip: 'Notifications',
-                onPressed: () => Navigator.of(context).push(
-                  NotificationsScreen.route(hubId: hub.id, hubName: hub.name),
-                ),
-              );
+              return _NotificationBell(hubId: hub.id, hubName: hub.name);
             },
           ),
           IconButton(
@@ -104,6 +103,150 @@ class JoinHubScreen extends StatelessWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+class _NotificationBell extends StatefulWidget {
+  const _NotificationBell({required this.hubId, required this.hubName});
+
+  final String hubId;
+  final String hubName;
+
+  @override
+  State<_NotificationBell> createState() => _NotificationBellState();
+}
+
+class _NotificationBellState extends State<_NotificationBell> {
+  StreamSubscription<List<DealNotification>>? _subscription;
+  List<DealNotification> _notifications = const [];
+  Set<String> _knownNotificationIds = const {};
+  bool _receivedInitialSnapshot = false;
+  String? _subscribedHubId;
+  String? _subscribedUserId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _subscribeIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant _NotificationBell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.hubId != widget.hubId) _subscribeIfNeeded(force: true);
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeIfNeeded({bool force = false}) {
+    final userId = context.read<AuthRepository>().currentUser?.uid;
+    if (userId == null) return;
+    if (!force &&
+        _subscribedHubId == widget.hubId &&
+        _subscribedUserId == userId) {
+      return;
+    }
+
+    _subscription?.cancel();
+    _subscribedHubId = widget.hubId;
+    _subscribedUserId = userId;
+    _notifications = const [];
+    _knownNotificationIds = const {};
+    _receivedInitialSnapshot = false;
+
+    _subscription = context
+        .read<NotificationRepository>()
+        .watchNotifications(hubId: widget.hubId, currentUserId: userId)
+        .listen(_handleNotifications, onError: (_) {});
+  }
+
+  void _handleNotifications(List<DealNotification> notifications) {
+    final nextIds = notifications
+        .map((notification) => notification.id)
+        .toSet();
+    final newNotifications = notifications
+        .where(
+          (notification) => !_knownNotificationIds.contains(notification.id),
+        )
+        .toList();
+
+    if (mounted) {
+      setState(() {
+        _notifications = notifications;
+        _knownNotificationIds = nextIds;
+      });
+    }
+
+    if (!_receivedInitialSnapshot) {
+      _receivedInitialSnapshot = true;
+      return;
+    }
+    if (newNotifications.isEmpty || !mounted) return;
+
+    final latest = newNotifications.first;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              latest.title,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Text(latest.message),
+          ],
+        ),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = _notifications.length;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications_none_outlined),
+          tooltip: 'Notifications',
+          onPressed: () => Navigator.of(context).push(
+            NotificationsScreen.route(
+              hubId: widget.hubId,
+              hubName: widget.hubName,
+            ),
+          ),
+        ),
+        if (count > 0)
+          Positioned(
+            key: const Key('notification-badge'),
+            right: 6,
+            top: 6,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.error,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                count > 9 ? '9+' : '$count',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onError,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

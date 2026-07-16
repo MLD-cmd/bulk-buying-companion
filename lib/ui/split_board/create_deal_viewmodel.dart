@@ -152,6 +152,38 @@ class CreateDealViewModel extends ChangeNotifier {
     return null;
   }
 
+  String? validatePaymentMethod(String? value) {
+    return _validateOptionalLength(
+      value,
+      max: 40,
+      message: 'Keep the payment method under 40 characters.',
+    );
+  }
+
+  String? validatePaymentAccountName(String? value) {
+    return _validateOptionalLength(
+      value,
+      max: 80,
+      message: 'Keep the account name under 80 characters.',
+    );
+  }
+
+  String? validatePaymentAccountHandle(String? value) {
+    return _validateOptionalLength(
+      value,
+      max: 80,
+      message: 'Keep the account number or handle under 80 characters.',
+    );
+  }
+
+  String? validatePaymentInstructions(String? value) {
+    return _validateOptionalLength(
+      value,
+      max: 180,
+      message: 'Keep the payment instructions under 180 characters.',
+    );
+  }
+
   /// Optional, but a deadline that has already passed would close the deal the
   /// moment it is published.
   String? validateDeadline(DateTime? value) {
@@ -170,6 +202,15 @@ class CreateDealViewModel extends ChangeNotifier {
     final parsed = int.tryParse(text);
     if (parsed == null) return '$label must be a whole number.';
     if (parsed < min) return '$label must be at least $min.';
+    return null;
+  }
+
+  String? _validateOptionalLength(
+    String? value, {
+    required int max,
+    required String message,
+  }) {
+    if ((value ?? '').trim().length > max) return message;
     return null;
   }
 

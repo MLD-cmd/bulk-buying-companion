@@ -155,6 +155,7 @@ class _NotificationCard extends StatelessWidget {
       DealNotificationKind.dealFull => Icons.groups_2_outlined,
       DealNotificationKind.paymentReminder => Icons.payments_outlined,
       DealNotificationKind.pickupReminder => Icons.shopping_bag_outlined,
+      DealNotificationKind.itemCollected => Icons.task_alt_outlined,
       DealNotificationKind.cancellation => Icons.cancel_outlined,
     };
   }
@@ -201,6 +202,10 @@ class _NotificationColors {
                 background: scheme.primaryContainer,
                 foreground: scheme.onPrimaryContainer,
               ),
+      DealNotificationKind.itemCollected => _NotificationColors(
+        background: scheme.primaryContainer,
+        foreground: scheme.onPrimaryContainer,
+      ),
       DealNotificationKind.reservationUpdate ||
       DealNotificationKind.dealFull => _NotificationColors(
         background: scheme.secondaryContainer,

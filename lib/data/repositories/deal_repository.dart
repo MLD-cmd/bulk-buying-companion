@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../models/deal.dart';
@@ -29,11 +31,17 @@ Deal dealFromRow(Map<String, dynamic> row) {
     availableSlots: (row['available_slots'] as num).toInt(),
     totalSlots: (row['total_slots'] as num).toInt(),
     pickupLocation: row['pickup_location'] as String,
+    paymentMethod: row['payment_method'] as String?,
+    paymentAccountName: row['payment_account_name'] as String?,
+    paymentAccountHandle: row['payment_account_handle'] as String?,
+    paymentInstructions: row['payment_instructions'] as String?,
     closesAt: closesAt == null ? null : DateTime.parse(closesAt).toLocal(),
-    purchasedAt:
-        purchasedAt == null ? null : DateTime.parse(purchasedAt).toLocal(),
-    cancelledAt:
-        cancelledAt == null ? null : DateTime.parse(cancelledAt).toLocal(),
+    purchasedAt: purchasedAt == null
+        ? null
+        : DateTime.parse(purchasedAt).toLocal(),
+    cancelledAt: cancelledAt == null
+        ? null
+        : DateTime.parse(cancelledAt).toLocal(),
     // Absent on the raw deals row an insert returns; deal_feed carries them.
     paidCount: (row['paid_count'] as num?)?.toInt() ?? 0,
     collectedCount: (row['collected_count'] as num?)?.toInt() ?? 0,
@@ -59,6 +67,10 @@ DealUnit _dealUnitFromValue(String value) {
 /// concrete implementation.
 abstract class DealRepository {
   Future<List<Deal>> getDeals(String hubId);
+
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
 
   Future<Deal> createDeal(DealDraft draft);
 }
@@ -181,6 +193,11 @@ class MockDealRepository implements DealRepository {
   }
 
   @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
   Future<Deal> createDeal(DealDraft draft) async {
     final deal = Deal(
       id: 'mock-deal-${++_nextId}',
@@ -196,6 +213,10 @@ class MockDealRepository implements DealRepository {
       availableSlots: draft.totalSlots - 1,
       totalSlots: draft.totalSlots,
       pickupLocation: draft.pickupLocation.trim(),
+      paymentMethod: _optionalText(draft.paymentMethod),
+      paymentAccountName: _optionalText(draft.paymentAccountName),
+      paymentAccountHandle: _optionalText(draft.paymentAccountHandle),
+      paymentInstructions: _optionalText(draft.paymentInstructions),
       // A new deal has exactly one participant, the host, and the host's slot is
       // paid from the moment it exists — they cannot pay themselves.
       paidCount: 1,
@@ -211,6 +232,69 @@ abstract class SupabaseDealGateway {
   Future<List<Map<String, dynamic>>> getDeals(String hubId);
 
   Future<Map<String, dynamic>> insertDeal(Map<String, dynamic> values);
+}
+
+abstract class DealInvalidationSource {
+  Stream<void> watchHub(String hubId);
+}
+
+class SupabaseDealInvalidationSource implements DealInvalidationSource {
+  SupabaseDealInvalidationSource(this._client);
+
+  final SupabaseClient _client;
+
+  @override
+  Stream<void> watchHub(String hubId) {
+    late final RealtimeChannel channel;
+    final controller = StreamController<void>();
+
+    void invalidate(PostgresChangePayload _) {
+      if (!controller.isClosed) controller.add(null);
+    }
+
+    controller.onListen = () {
+      channel = _client
+          .channel('deals:$hubId:${DateTime.now().microsecondsSinceEpoch}')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'deals',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'hub_id',
+              value: hubId,
+            ),
+            callback: invalidate,
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'deal_reservations',
+            callback: invalidate,
+          )
+          .subscribe((status, error) {
+            if (controller.isClosed) return;
+            if (status == RealtimeSubscribeStatus.channelError ||
+                status == RealtimeSubscribeStatus.timedOut) {
+              controller.addError(
+                error ?? const RealtimeDealSubscriptionFailure(),
+              );
+            }
+          });
+    };
+
+    controller.onCancel = () async {
+      await channel.unsubscribe();
+    };
+    return controller.stream;
+  }
+}
+
+class RealtimeDealSubscriptionFailure implements Exception {
+  const RealtimeDealSubscriptionFailure();
+
+  @override
+  String toString() => 'Realtime deal subscription failed.';
 }
 
 class PostgrestSupabaseDealGateway implements SupabaseDealGateway {
@@ -242,10 +326,13 @@ class SupabaseDealRepository implements DealRepository {
   SupabaseDealRepository({
     required SupabaseDealGateway gateway,
     required String Function() currentUserId,
+    DealInvalidationSource? invalidationSource,
   }) : _gateway = gateway,
-       _currentUserId = currentUserId;
+       _currentUserId = currentUserId,
+       _invalidationSource = invalidationSource;
 
   final SupabaseDealGateway _gateway;
+  final DealInvalidationSource? _invalidationSource;
 
   /// The insert policy checks `auth.uid() = created_by`, so a deal cannot be
   /// published without the signed-in student's id.
@@ -255,6 +342,18 @@ class SupabaseDealRepository implements DealRepository {
   Future<List<Deal>> getDeals(String hubId) async {
     final rows = await _gateway.getDeals(hubId);
     return rows.map(dealFromRow).toList();
+  }
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+
+    final invalidationSource = _invalidationSource;
+    if (invalidationSource == null) return;
+
+    await for (final _ in invalidationSource.watchHub(hubId)) {
+      yield await getDeals(hubId);
+    }
   }
 
   @override
@@ -272,6 +371,10 @@ class SupabaseDealRepository implements DealRepository {
         'unit': draft.unit.name,
         'total_slots': draft.totalSlots,
         'pickup_location': draft.pickupLocation.trim(),
+        'payment_method': _optionalText(draft.paymentMethod),
+        'payment_account_name': _optionalText(draft.paymentAccountName),
+        'payment_account_handle': _optionalText(draft.paymentAccountHandle),
+        'payment_instructions': _optionalText(draft.paymentInstructions),
         'closes_at': draft.closesAt?.toIso8601String(),
       });
       // The insert returns the raw deals row, which carries no counts. The
@@ -298,4 +401,9 @@ class SupabaseDealRepository implements DealRepository {
     }
     return 'Could not publish the deal. Please try again.';
   }
+}
+
+String? _optionalText(String? value) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : trimmed;
 }

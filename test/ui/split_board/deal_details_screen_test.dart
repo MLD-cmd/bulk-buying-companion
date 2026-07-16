@@ -295,6 +295,47 @@ void main() {
     expect(find.text('Everyone has paid.'), findsOneWidget);
   });
 
+  testWidgets('the host sees manual payment instructions on the deal', (
+    tester,
+  ) async {
+    await pumpDetails(
+      tester,
+      const Deal(
+        id: 'payment-deal',
+        hubId: 'colon',
+        createdBy: 'host',
+        hostName: 'Marco Villanueva',
+        title: 'Cooking Oil 5L',
+        category: DealCategory.pantry,
+        totalPrice: 400,
+        amount: 4,
+        unit: DealUnit.litre,
+        availableSlots: 2,
+        totalSlots: 4,
+        pickupLocation: 'Lobby',
+        paymentMethod: 'GCash',
+        paymentAccountName: 'Marco Villanueva',
+        paymentAccountHandle: '09171234567',
+        paymentInstructions: 'Send a screenshot after paying.',
+        paidCount: 1,
+      ),
+      currentUserId: 'host',
+    );
+
+    expect(find.text('PAYMENT'), findsOneWidget);
+    expect(find.byKey(const Key('detail-payment-amount')), findsOneWidget);
+    expect(find.text('Amount owed: P100'), findsOneWidget);
+    expect(find.text('GCash'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('detail-payment-account-name')))
+          .data,
+      'Marco Villanueva',
+    );
+    expect(find.text('09171234567'), findsOneWidget);
+    expect(find.text('Send a screenshot after paying.'), findsOneWidget);
+  });
+
   testWidgets('a student sees the state but cannot change it', (tester) async {
     final repository = MockReservationRepository(
       deal: hostedDeal(availableSlots: 3, totalSlots: 4),
