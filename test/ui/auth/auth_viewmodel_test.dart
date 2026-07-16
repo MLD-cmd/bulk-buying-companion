@@ -118,6 +118,11 @@ class _DelayedAuthRepository implements AuthRepository {
   }) => registerCompleter.future;
 
   @override
+  Future<AppUser> updateDisplayName(String displayName) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<void> signOut() async {}
 
   @override
