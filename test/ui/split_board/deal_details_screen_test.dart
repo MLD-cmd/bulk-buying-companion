@@ -517,14 +517,14 @@ void main() {
       reportRepository.submittedDrafts.single.targetType,
       ReportTargetType.user,
     );
-    expect(reportRepository.submittedDrafts.single.reportedUserId, 'user-1');
+    expect(reportRepository.submittedDrafts.single.reportedUserId, 'ana');
     expect(
       reportRepository.submittedDrafts.single.reason,
       ReportReason.inappropriate,
     );
     expect(
       reportRepository.submittedDrafts.single.explanation,
-      'The organiser is asking for unrelated personal info.',
+      'This participant is harassing people in the pickup thread.',
     );
     expect(
       find.text('Report submitted. Thanks for helping keep this hub safe.'),
