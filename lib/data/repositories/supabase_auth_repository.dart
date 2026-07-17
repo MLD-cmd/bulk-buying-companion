@@ -242,8 +242,8 @@ class SupabaseAuthRepository implements AuthRepository {
       'email_address_invalid' => 'Enter a valid email address.',
       'email_not_confirmed' => 'Confirm your email address, then log in.',
       'weak_password' => 'Choose a longer password.',
-      'over_email_send_rate_limit' ||
-      'over_request_rate_limit' => 'Too many attempts. Please wait and try again.',
+      'over_email_send_rate_limit' || 'over_request_rate_limit' =>
+        'Too many attempts. Please wait and try again.',
       'signup_disabled' => 'New accounts are not being accepted right now.',
       _ => null,
     };
