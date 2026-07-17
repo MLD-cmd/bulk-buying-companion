@@ -15,6 +15,36 @@ import '../../utils/geo.dart';
 /// tight enough that a hub across the city drops off the list.
 const double kNearbyRadiusMeters = 2000;
 
+enum _MembershipAction { join, leave }
+
+class _MembershipRetry {
+  const _MembershipRetry({
+    required this.action,
+    required this.userId,
+    required this.identityGeneration,
+    this.hubId,
+  });
+
+  final _MembershipAction action;
+  final String userId;
+  final int identityGeneration;
+  final String? hubId;
+}
+
+class _LocationOutcome {
+  const _LocationOutcome({
+    required this.hubs,
+    this.failureMessage,
+    this.disableNearbyFilter = false,
+    this.hasDistanceUpdate = false,
+  });
+
+  final List<Hub> hubs;
+  final String? failureMessage;
+  final bool disableNearbyFilter;
+  final bool hasDistanceUpdate;
+}
+
 class JoinHubViewModel extends ChangeNotifier {
   JoinHubViewModel({
     required AuthRepository authRepository,
@@ -24,8 +54,8 @@ class JoinHubViewModel extends ChangeNotifier {
        _hubRepository = hubRepository,
        _locationService = locationService {
     _authSub = _authRepository.authStateChanges.listen(_onAuthChanged);
-    final currentUser = _authRepository.currentUser;
-    if (currentUser != null) _startHubUpdates(currentUser.uid);
+    // Handles a null user too, which is what resets identity state on sign-out.
+    _onAuthChanged(_authRepository.currentUser);
   }
 
   final AuthRepository _authRepository;
@@ -39,9 +69,22 @@ class JoinHubViewModel extends ChangeNotifier {
   String? _joinedHubId;
   String? _pendingSwitchId;
   String? _locationFailureMessage;
+  String? _directoryErrorMessage;
+  String? _membershipErrorMessage;
+  String? _updatingHubId;
   bool _isLoading = true;
   bool _nearbyOnly = false;
   bool _isUpdatingMembership = false;
+  bool _isLeaving = false;
+  bool _identityInitialized = false;
+  bool _isDisposed = false;
+  String? _activeUserId;
+  int _identityGeneration = 0;
+  int _loadGeneration = 0;
+  int _locationGeneration = 0;
+  int _membershipGeneration = 0;
+  int? _activeLoadGeneration;
+  _MembershipRetry? _failedMembershipRetry;
 
   List<Hub> get filteredHubs {
     var hubs = _hubs;
@@ -72,7 +115,15 @@ class JoinHubViewModel extends ChangeNotifier {
   String? get pendingSwitchId => _pendingSwitchId;
   bool get isLoading => _isLoading;
   String? get locationFailureMessage => _locationFailureMessage;
+  String? get directoryErrorMessage => _directoryErrorMessage;
+  String? get membershipErrorMessage => _membershipErrorMessage;
+  String? get updatingHubId => _updatingHubId;
   bool get nearbyOnly => _nearbyOnly;
+  bool get isLeaving => _isLeaving;
+  bool get hasDirectoryData => _hubs.isNotEmpty;
+  bool get canRetryMembership => _failedMembershipRetry != null;
+
+  bool isUpdatingHub(String hubId) => _updatingHubId == hubId;
 
   /// True while a join or leave is in flight. The hub actions disable
   /// themselves on it, so the guard in [join] is a backstop rather than the
@@ -99,30 +150,72 @@ class JoinHubViewModel extends ChangeNotifier {
   }
 
   void _onAuthChanged(AppUser? user) {
-    if (user == null) return;
-    _startHubUpdates(user.uid);
+    if (_isDisposed) return;
+
+    final userId = user?.uid;
+    if (_identityInitialized && userId == _activeUserId) return;
+
+    _identityInitialized = true;
+    _activeUserId = userId;
+    _identityGeneration += 1;
+    _loadGeneration += 1;
+    _locationGeneration += 1;
+    _membershipGeneration += 1;
+    _activeLoadGeneration = null;
+
+    // Signing out must not leave the previous student's directory on screen.
+    _hubSub?.cancel();
+    _hubSub = null;
+    _hubs = const [];
+    _joinedHubId = null;
+    _pendingSwitchId = null;
+    _directoryErrorMessage = null;
+    _locationFailureMessage = null;
+    _membershipErrorMessage = null;
+    _failedMembershipRetry = null;
+    _updatingHubId = null;
+    _nearbyOnly = false;
+    _isUpdatingMembership = false;
+    _isLeaving = false;
+    _isLoading = userId != null;
+    notifyListeners();
+
+    if (userId != null) _startHubUpdates(userId);
   }
 
+  /// Realtime repositories push the directory; the rest are read once. Either
+  /// way the result lands through the same identity and location guards.
   void _startHubUpdates(String userId) {
     final realtimeRepository = _hubRepository is RealtimeHubRepository
         ? _hubRepository as RealtimeHubRepository
         : null;
 
     if (realtimeRepository == null) {
-      _load(userId);
+      unawaited(_load(userId));
       return;
     }
 
-    _isLoading = true;
-    notifyListeners();
+    final identityGeneration = _identityGeneration;
     _hubSub?.cancel();
     _hubSub = realtimeRepository
         .watchHubDirectory(userId)
-        .listen(_setHubSnapshot, onError: (_) => _clearHubSnapshot());
+        .listen(
+          (snapshot) =>
+              unawaited(_setHubSnapshot(userId, identityGeneration, snapshot)),
+          onError: (_) => _setHubSnapshotError(userId, identityGeneration),
+        );
   }
 
   Future<void> _load(String userId) async {
-    _isLoading = true;
+    if (!_isCurrentIdentity(userId) || _isUpdatingMembership) return;
+
+    final identityGeneration = _identityGeneration;
+    final loadGeneration = ++_loadGeneration;
+    final locationGeneration = ++_locationGeneration;
+    _activeLoadGeneration = loadGeneration;
+    final hasCachedDirectory = _hubs.isNotEmpty;
+    _directoryErrorMessage = null;
+    _isLoading = !hasCachedDirectory;
     notifyListeners();
 
     try {
@@ -130,47 +223,98 @@ class JoinHubViewModel extends ChangeNotifier {
         _hubRepository.getHubs(),
         _hubRepository.getCurrentHubId(userId),
       ]);
+      if (!_isCurrentLoad(userId, identityGeneration, loadGeneration)) return;
 
-      _hubs = results[0] as List<Hub>;
-      _joinedHubId = results[1] as String?;
-      await _replaceDistancesWithCurrentLocation();
+      final stagedHubs = List<Hub>.of(results[0] as List<Hub>);
+      final stagedJoinedHubId = results[1] as String?;
+      final locationOutcome = await _measureDistances(stagedHubs);
+      if (!_isCurrentLoad(userId, identityGeneration, loadGeneration) ||
+          _locationGeneration != locationGeneration) {
+        return;
+      }
+
+      _hubs = locationOutcome.hubs;
+      _joinedHubId = stagedJoinedHubId;
+      _directoryErrorMessage = null;
+      _locationFailureMessage = locationOutcome.failureMessage;
+      if (locationOutcome.disableNearbyFilter) _nearbyOnly = false;
+      _activeLoadGeneration = null;
+      _isLoading = false;
+      notifyListeners();
     } catch (_) {
-      _hubs = const [];
-      _joinedHubId = null;
-      _pendingSwitchId = null;
-      _locationFailureMessage = null;
-    } finally {
+      if (!_isCurrentLoad(userId, identityGeneration, loadGeneration)) return;
+
+      _directoryErrorMessage =
+          'Couldn’t load hubs. Check your connection and try again.';
+      _activeLoadGeneration = null;
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> _setHubSnapshot(HubDirectorySnapshot snapshot) async {
-    _hubs = snapshot.hubs;
+  bool _isCurrentIdentity(String userId, [int? identityGeneration]) {
+    return !_isDisposed &&
+        _activeUserId == userId &&
+        (identityGeneration == null ||
+            _identityGeneration == identityGeneration);
+  }
+
+  bool _isCurrentLoad(
+    String userId,
+    int identityGeneration,
+    int loadGeneration,
+  ) {
+    return _isCurrentIdentity(userId, identityGeneration) &&
+        _loadGeneration == loadGeneration &&
+        _activeLoadGeneration == loadGeneration;
+  }
+
+  /// A pushed directory, measured and committed through the same guards as
+  /// [_load] so a snapshot for a signed-out student can never land.
+  Future<void> _setHubSnapshot(
+    String userId,
+    int identityGeneration,
+    HubDirectorySnapshot snapshot,
+  ) async {
+    if (!_isCurrentIdentity(userId, identityGeneration)) return;
+
+    final locationGeneration = ++_locationGeneration;
+    final outcome = await _measureDistances(List<Hub>.of(snapshot.hubs));
+    if (!_isCurrentIdentity(userId, identityGeneration) ||
+        _locationGeneration != locationGeneration) {
+      return;
+    }
+
+    _hubs = outcome.hubs;
     _joinedHubId = snapshot.joinedHubId;
     _pendingSwitchId = null;
-    await _replaceDistancesWithCurrentLocation();
+    _directoryErrorMessage = null;
+    _locationFailureMessage = outcome.failureMessage;
+    if (outcome.disableNearbyFilter) _nearbyOnly = false;
     _isLoading = false;
     notifyListeners();
   }
 
-  void _clearHubSnapshot() {
-    _hubs = const [];
-    _joinedHubId = null;
-    _pendingSwitchId = null;
-    _locationFailureMessage = null;
+  void _setHubSnapshotError(String userId, int identityGeneration) {
+    if (!_isCurrentIdentity(userId, identityGeneration)) return;
+
+    // Mirrors _load's catch rather than emptying the list: a dropped stream is
+    // a failure to read the directory, not proof that there are no hubs.
+    _directoryErrorMessage =
+        'Couldn’t load hubs. Check your connection and try again.';
     _isLoading = false;
     notifyListeners();
   }
 
-  Future<void> _replaceDistancesWithCurrentLocation() async {
-    if (!_hubs.any((hub) => hub.hasCoordinates)) return;
+  Future<_LocationOutcome> _measureDistances(List<Hub> hubs) async {
+    if (!hubs.any((hub) => hub.hasCoordinates)) {
+      return _LocationOutcome(hubs: hubs);
+    }
 
     try {
       final coordinates = await _locationService.getCurrentPosition();
-      _locationFailureMessage = null;
-      _hubs = _sortedByDistance(
-        _hubs.map((hub) {
+      final measuredHubs = _sortedByDistance(
+        hubs.map((hub) {
           if (!hub.hasCoordinates) return hub;
           final meters = haversineMeters(
             startLatitude: coordinates.latitude,
@@ -184,14 +328,69 @@ class JoinHubViewModel extends ChangeNotifier {
           );
         }).toList(),
       );
+      return _LocationOutcome(hubs: measuredHubs, hasDistanceUpdate: true);
     } on LocationFailure catch (failure) {
-      _locationFailureMessage = failure.message;
-      _nearbyOnly = false;
+      return _LocationOutcome(
+        hubs: hubs,
+        failureMessage: failure.message,
+        disableNearbyFilter: true,
+      );
     } catch (_) {
-      _locationFailureMessage =
-          'Could not read your current location. Showing saved distances.';
-      _nearbyOnly = false;
+      return _LocationOutcome(
+        hubs: hubs,
+        failureMessage:
+            'Could not read your current location. Showing saved distances.',
+        disableNearbyFilter: true,
+      );
     }
+  }
+
+  Future<void> retryLocation() async {
+    final userId = _activeUserId;
+    if (userId == null ||
+        _isUpdatingMembership ||
+        _activeLoadGeneration != null) {
+      return;
+    }
+
+    final identityGeneration = _identityGeneration;
+    final locationGeneration = ++_locationGeneration;
+    final directorySnapshot = List<Hub>.of(_hubs);
+    _locationFailureMessage = null;
+    notifyListeners();
+
+    final outcome = await _measureDistances(directorySnapshot);
+    if (!_isCurrentIdentity(userId, identityGeneration) ||
+        _locationGeneration != locationGeneration ||
+        _activeLoadGeneration != null) {
+      return;
+    }
+
+    if (outcome.hasDistanceUpdate) {
+      _hubs = _mergeDistanceFields(_hubs, outcome.hubs);
+    }
+    _locationFailureMessage = outcome.failureMessage;
+    if (outcome.disableNearbyFilter) _nearbyOnly = false;
+    notifyListeners();
+  }
+
+  List<Hub> _mergeDistanceFields(List<Hub> current, List<Hub> measured) {
+    final measuredById = {for (final hub in measured) hub.id: hub};
+    final merged = current.map((hub) {
+      final distanceSource = measuredById[hub.id];
+      if (distanceSource == null) return hub;
+      return Hub(
+        id: hub.id,
+        name: hub.name,
+        type: hub.type,
+        memberCount: hub.memberCount,
+        distanceLabel: distanceSource.distanceLabel,
+        latitude: hub.latitude,
+        longitude: hub.longitude,
+        distanceMeters: distanceSource.distanceMeters,
+      );
+    }).toList();
+    return _sortedByDistance(merged);
   }
 
   /// Nearest first. Hubs with no coordinates have no distance to sort on, so
@@ -207,8 +406,8 @@ class JoinHubViewModel extends ChangeNotifier {
 
   /// Re-reads the hub directory, e.g. after the student registers a new hub.
   Future<void> refresh() async {
-    final userId = _authRepository.currentUser?.uid;
-    if (userId == null) return;
+    final userId = _activeUserId;
+    if (userId == null || _isUpdatingMembership) return;
     await _load(userId);
   }
 
@@ -221,7 +420,7 @@ class JoinHubViewModel extends ChangeNotifier {
   /// away from an existing hub asks for confirmation first via
   /// [requestSwitch] / [confirmSwitch] / [cancelSwitch].
   Future<void> join(String hubId) async {
-    final userId = _authRepository.currentUser?.uid;
+    final userId = _activeUserId;
     if (userId == null) return;
     // A second tap while the first is still in flight would read the same
     // stale _joinedHubId and count the same student twice. The backend upsert
@@ -229,21 +428,61 @@ class JoinHubViewModel extends ChangeNotifier {
     // local count would drift, and it would stay wrong until a full reload.
     if (_isUpdatingMembership) return;
 
+    final identityGeneration = _identityGeneration;
+    final membershipGeneration = ++_membershipGeneration;
+    _invalidateReadsForMembership();
+    _membershipErrorMessage = null;
+    _failedMembershipRetry = null;
     _isUpdatingMembership = true;
+    _updatingHubId = hubId;
+    _isLeaving = false;
     notifyListeners();
 
     try {
       final previousHubId = _joinedHubId;
       await _hubRepository.joinHub(userId: userId, hubId: hubId);
+      if (!_isCurrentMembership(
+        userId,
+        identityGeneration,
+        membershipGeneration,
+      )) {
+        return;
+      }
+
       _joinedHubId = hubId;
       // The membership row just moved server-side; mirror that locally rather
       // than waiting on a full reload for the member counts to catch up.
       if (previousHubId == hubId) return;
       if (previousHubId != null) _adjustMemberCount(previousHubId, -1);
       _adjustMemberCount(hubId, 1);
+    } catch (_) {
+      if (!_isCurrentMembership(
+        userId,
+        identityGeneration,
+        membershipGeneration,
+      )) {
+        return;
+      }
+
+      _membershipErrorMessage =
+          'Couldn’t join this hub. Your current hub has not changed. '
+          'Check your connection and try again.';
+      _failedMembershipRetry = _MembershipRetry(
+        action: _MembershipAction.join,
+        userId: userId,
+        identityGeneration: identityGeneration,
+        hubId: hubId,
+      );
     } finally {
-      _isUpdatingMembership = false;
-      notifyListeners();
+      if (_isCurrentMembership(
+        userId,
+        identityGeneration,
+        membershipGeneration,
+      )) {
+        _isUpdatingMembership = false;
+        _updatingHubId = null;
+        notifyListeners();
+      }
     }
   }
 
@@ -265,25 +504,93 @@ class JoinHubViewModel extends ChangeNotifier {
   }
 
   Future<void> leave() async {
-    final userId = _authRepository.currentUser?.uid;
+    final userId = _activeUserId;
     if (userId == null) return;
     // Same reasoning as [join]: a double tap would decrement the count twice
     // against a single membership row.
     if (_isUpdatingMembership) return;
 
+    final identityGeneration = _identityGeneration;
+    final membershipGeneration = ++_membershipGeneration;
+    _invalidateReadsForMembership();
+    _membershipErrorMessage = null;
+    _failedMembershipRetry = null;
     _isUpdatingMembership = true;
+    _updatingHubId = null;
+    _isLeaving = true;
     notifyListeners();
 
     try {
       final hubId = _joinedHubId;
       await _hubRepository.leaveHub(userId: userId);
+      if (!_isCurrentMembership(
+        userId,
+        identityGeneration,
+        membershipGeneration,
+      )) {
+        return;
+      }
+
       if (hubId != null) _adjustMemberCount(hubId, -1);
       _joinedHubId = null;
       _pendingSwitchId = null;
+    } catch (_) {
+      if (!_isCurrentMembership(
+        userId,
+        identityGeneration,
+        membershipGeneration,
+      )) {
+        return;
+      }
+
+      _membershipErrorMessage =
+          'Couldn’t leave the hub. You are still a member. '
+          'Check your connection and try again.';
+      _failedMembershipRetry = _MembershipRetry(
+        action: _MembershipAction.leave,
+        userId: userId,
+        identityGeneration: identityGeneration,
+      );
     } finally {
-      _isUpdatingMembership = false;
-      notifyListeners();
+      if (_isCurrentMembership(
+        userId,
+        identityGeneration,
+        membershipGeneration,
+      )) {
+        _isUpdatingMembership = false;
+        _isLeaving = false;
+        notifyListeners();
+      }
     }
+  }
+
+  Future<void> retryMembership() {
+    final retry = _failedMembershipRetry;
+    if (retry == null ||
+        !_isCurrentIdentity(retry.userId, retry.identityGeneration)) {
+      return Future<void>.value();
+    }
+
+    return switch (retry.action) {
+      _MembershipAction.join => join(retry.hubId!),
+      _MembershipAction.leave => leave(),
+    };
+  }
+
+  void _invalidateReadsForMembership() {
+    _loadGeneration += 1;
+    _locationGeneration += 1;
+    _activeLoadGeneration = null;
+    _isLoading = false;
+  }
+
+  bool _isCurrentMembership(
+    String userId,
+    int identityGeneration,
+    int membershipGeneration,
+  ) {
+    return _isCurrentIdentity(userId, identityGeneration) &&
+        _membershipGeneration == membershipGeneration;
   }
 
   /// Applies [delta] to the given hub's local member count, clamped so a
@@ -297,6 +604,13 @@ class JoinHubViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _activeUserId = null;
+    _identityGeneration += 1;
+    _loadGeneration += 1;
+    _locationGeneration += 1;
+    _membershipGeneration += 1;
+    _activeLoadGeneration = null;
     _authSub.cancel();
     _hubSub?.cancel();
     super.dispose();

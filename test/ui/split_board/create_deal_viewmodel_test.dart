@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/deal_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
@@ -355,6 +357,36 @@ void main() {
       isNull,
     );
   });
+
+  test(
+    'publishing that outlives the screen does not notify after dispose',
+    () async {
+      final repository = _BlockedDealRepository();
+      final viewModel = CreateDealViewModel(dealRepository: repository);
+      var notifications = 0;
+      viewModel.addListener(() => notifications += 1);
+
+      final pending = viewModel.submit(_draft);
+      await Future<void>.value();
+      final beforeDispose = notifications;
+
+      // The student leaves the screen while the deal is still in flight.
+      viewModel.dispose();
+      repository.complete();
+      await pending;
+
+      // A ChangeNotifier that notifies after dispose throws; nothing should have
+      // reached the listener either.
+      expect(notifications, beforeDispose);
+    },
+  );
+
+  test('submitting after dispose is refused instead of throwing', () async {
+    final viewModel = CreateDealViewModel(dealRepository: MockDealRepository());
+    viewModel.dispose();
+
+    await expectLater(viewModel.submit(_draft), completion(isNull));
+  });
 }
 
 const _draft = DealDraft(
@@ -367,6 +399,39 @@ const _draft = DealDraft(
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
 );
+
+/// Holds [createDeal] open so a publish can still be in flight when the screen
+/// that started it goes away.
+class _BlockedDealRepository implements DealRepository {
+  final _gate = Completer<Deal>();
+
+  void complete() => _gate.complete(
+    Deal(
+      id: 'published',
+      hubId: _draft.hubId,
+      title: _draft.title,
+      category: _draft.category,
+      totalPrice: _draft.totalPrice,
+      amount: _draft.amount,
+      unit: _draft.unit,
+      availableSlots: _draft.totalSlots - 1,
+      totalSlots: _draft.totalSlots,
+      pickupLocation: _draft.pickupLocation,
+    ),
+  );
+
+  @override
+  Future<List<Deal>> getDeals(String hubId) async => const [];
+
+  @override
+  Future<Deal> createDeal(DealDraft draft) => _gate.future;
+
+  /// The default on [DealRepository]; `implements` does not inherit it.
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+}
 
 class _RefusingDealRepository implements DealRepository {
   @override

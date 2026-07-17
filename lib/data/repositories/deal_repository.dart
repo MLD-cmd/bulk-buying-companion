@@ -85,6 +85,12 @@ class DealFailure implements Exception {
   String toString() => message;
 }
 
+/// Seed deadlines are offsets from now, not calendar dates: a fixed date turns
+/// every seed expired a few days after it is written, which silently closes the
+/// demo data the lifecycle statuses are meant to show.
+DateTime _closesIn(int days) =>
+    DateTime.now().add(Duration(days: days)).copyWith(hour: 23, minute: 59);
+
 /// In-memory stand-in. Deals are stubbed per hub so the Split Board renders
 /// with placeholder cards in tests.
 class MockDealRepository implements DealRepository {
@@ -109,7 +115,7 @@ class MockDealRepository implements DealRepository {
             totalSlots: 5,
             pickupLocation: 'USJR Main Gate',
             paidCount: 1,
-            closesAt: DateTime(2026, 7, 16),
+            closesAt: _closesIn(3),
           ),
           // Down to its last slot.
           Deal(
@@ -126,7 +132,7 @@ class MockDealRepository implements DealRepository {
             totalSlots: 4,
             pickupLocation: 'Colon Street Hub',
             paidCount: 2,
-            closesAt: DateTime(2026, 7, 14),
+            closesAt: _closesIn(1),
           ),
           Deal(
             id: 'colon-detergent',
@@ -143,7 +149,7 @@ class MockDealRepository implements DealRepository {
             pickupLocation: 'Barangay Hall Lobby',
             // Full, and still waiting on one student's money.
             paidCount: 2,
-            closesAt: DateTime(2026, 7, 18),
+            closesAt: _closesIn(5),
           ),
         ],
         'magallanes': [
@@ -161,7 +167,7 @@ class MockDealRepository implements DealRepository {
             totalSlots: 3,
             pickupLocation: 'Magallanes Residence Gate',
             paidCount: 1,
-            closesAt: DateTime(2026, 7, 15),
+            closesAt: _closesIn(2),
           ),
           // Full and everyone has paid, so it is waiting on Karl to go and buy
           // the coffee.
@@ -179,7 +185,7 @@ class MockDealRepository implements DealRepository {
             totalSlots: 6,
             pickupLocation: 'Tower A Lobby',
             paidCount: 6,
-            closesAt: DateTime(2026, 7, 19),
+            closesAt: _closesIn(6),
           ),
         ],
       };

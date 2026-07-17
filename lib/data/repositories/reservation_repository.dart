@@ -47,6 +47,19 @@ abstract class RealtimeReservationRepository {
   Stream<DealDetailsSnapshot> watchDealDetails(Deal deal);
 }
 
+/// Answers "which of these deals is this student in?" in one read.
+///
+/// Optional, like [RealtimeReservationRepository]: a caller without it has to
+/// ask per deal, pulling down every participant of every deal to look for one
+/// id. The profile's deal history asks this on every realtime push, so the
+/// per-deal walk is a read per deal per push.
+abstract class BatchReservationRepository {
+  Future<Set<String>> getDealIdsWithSlotFor(
+    String userId,
+    List<String> dealIds,
+  );
+}
+
 /// Raised when a slot cannot be claimed or released. The message is user-facing.
 class ReservationFailure implements Exception {
   const ReservationFailure(this.message);
@@ -61,6 +74,9 @@ abstract class SupabaseReservationGateway {
   Future<Map<String, dynamic>> getDeal(String dealId);
 
   Future<List<Map<String, dynamic>>> getParticipants(String dealId);
+
+  /// The ids among [dealIds] that [userId] holds a slot in.
+  Future<Set<String>> getHeldDealIds(String userId, List<String> dealIds);
 
   Future<Map<String, dynamic>> reserveSlot(String dealId);
 
@@ -174,6 +190,24 @@ class PostgrestSupabaseReservationGateway
         .order('reserved_at');
     return List<Map<String, dynamic>>.from(rows);
   }
+
+  @override
+  Future<Set<String>> getHeldDealIds(
+    String userId,
+    List<String> dealIds,
+  ) async {
+    // Only the ids, only this student's rows: the caller is asking which deals
+    // they are in, not who else is in them.
+    final rows = await _client
+        .from('deal_participants')
+        .select('deal_id')
+        .eq('user_id', userId)
+        .inFilter('deal_id', dealIds);
+    return {
+      for (final row in List<Map<String, dynamic>>.from(rows))
+        row['deal_id'] as String,
+    };
+  }
 }
 
 abstract class ReservationInvalidationSource {
@@ -248,7 +282,10 @@ class RealtimeReservationSubscriptionFailure implements Exception {
 }
 
 class SupabaseReservationRepository
-    implements ReservationRepository, RealtimeReservationRepository {
+    implements
+        ReservationRepository,
+        RealtimeReservationRepository,
+        BatchReservationRepository {
   SupabaseReservationRepository({
     required SupabaseReservationGateway gateway,
     ReservationInvalidationSource? invalidationSource,
@@ -267,6 +304,21 @@ class SupabaseReservationRepository
 
     await for (final _ in invalidationSource.watchDeal(deal.id)) {
       yield await _getSnapshot(deal);
+    }
+  }
+
+  /// One read for the whole history, rather than the base class's read per
+  /// deal. The profile re-runs this on every realtime push.
+  @override
+  Future<Set<String>> getDealIdsWithSlotFor(
+    String userId,
+    List<String> dealIds,
+  ) async {
+    if (dealIds.isEmpty) return const <String>{};
+    try {
+      return await _gateway.getHeldDealIds(userId, dealIds);
+    } on PostgrestException catch (error) {
+      throw ReservationFailure(_messageFor(error));
     }
   }
 

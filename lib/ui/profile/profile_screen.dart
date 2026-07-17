@@ -39,10 +39,6 @@ class ProfileScreen extends StatelessWidget {
       body: SafeArea(
         child: Consumer<ProfileViewModel>(
           builder: (context, viewModel, _) {
-            if (viewModel.isLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
             final user = viewModel.user;
             if (user == null) {
               return const AppMessageState(
@@ -116,10 +112,13 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        _CurrentHubTile(hub: viewModel.currentHub),
-                        if (viewModel.errorMessage != null) ...[
+                        _CurrentHubSection(viewModel: viewModel),
+                        if (viewModel.signOutErrorMessage != null) ...[
                           const SizedBox(height: 16),
-                          AppBanner.error(message: viewModel.errorMessage!),
+                          AppBanner.error(
+                            key: const Key('profile-sign-out-error'),
+                            message: viewModel.signOutErrorMessage!,
+                          ),
                         ],
                         const SizedBox(height: 20),
                         OutlinedButton.icon(
@@ -150,6 +149,19 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 18),
+                        if (viewModel.dealHistoryErrorMessage != null) ...[
+                          // Without this the three sections below all read
+                          // "will appear here", which says the student has no
+                          // deals rather than that we could not read them.
+                          AppBanner.error(
+                            key: const Key('profile-deal-history-error'),
+                            message: viewModel.dealHistoryErrorMessage!,
+                            actionLabel: 'Try again',
+                            onAction: viewModel.retryLoad,
+                            actionBusy: viewModel.isLoading,
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         _DealHistorySection(
                           title: 'Hosted deals',
                           emptyMessage:
@@ -226,6 +238,83 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
+class _CurrentHubSection extends StatelessWidget {
+  const _CurrentHubSection({required this.viewModel});
+
+  final ProfileViewModel viewModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final hub = viewModel.currentHub;
+    final children = <Widget>[];
+
+    if (hub != null) {
+      children.add(_CurrentHubTile(hub: hub));
+    }
+
+    if (viewModel.loadErrorMessage != null) {
+      if (children.isNotEmpty) children.add(const SizedBox(height: 10));
+      children.add(
+        AppBanner.error(
+          key: const Key('profile-current-hub-error'),
+          message: viewModel.loadErrorMessage!,
+          actionLabel: 'Try again',
+          onAction: viewModel.retryLoad,
+          actionBusy: viewModel.isLoading,
+        ),
+      );
+    } else if (viewModel.isLoading) {
+      if (children.isNotEmpty) children.add(const SizedBox(height: 10));
+      children.add(const _CurrentHubLoading());
+    } else if (hub == null) {
+      children.add(const _CurrentHubTile(hub: null));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+}
+
+class _CurrentHubLoading extends StatelessWidget {
+  const _CurrentHubLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      // The row already says it is loading; liveRegion is what makes a screen
+      // reader announce it when the state flips, rather than only on focus.
+      child: Semantics(
+        container: true,
+        liveRegion: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              const ExcludeSemantics(
+                child: SizedBox.square(
+                  key: Key('current-hub-progress'),
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Loading your current hub…',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EditProfileDialog extends StatefulWidget {
   const _EditProfileDialog({
     required this.initialDisplayName,
@@ -257,34 +346,61 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Edit profile'),
-      content: Form(
-        key: _formKey,
-        child: TextFormField(
-          key: const Key('profile-display-name-field'),
-          controller: _controller,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(
-            labelText: 'Display name',
-            prefixIcon: Icon(Icons.badge_outlined),
+    // Listens so a rejected save reports itself here, in the dialog the student
+    // is still looking at, rather than behind it.
+    return AnimatedBuilder(
+      animation: widget.viewModel,
+      builder: (context, _) {
+        final saving = widget.viewModel.isSavingProfile;
+        final error = widget.viewModel.saveErrorMessage;
+
+        return AlertDialog(
+          title: const Text('Edit profile'),
+          content: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  key: const Key('profile-display-name-field'),
+                  controller: _controller,
+                  enabled: !saving,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: 'Display name',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Enter your full name.';
+                    }
+                    return null;
+                  },
+                  onFieldSubmitted: (_) => _save(),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  AppBanner.error(
+                    key: const Key('profile-save-error'),
+                    message: error,
+                  ),
+                ],
+              ],
+            ),
           ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Enter your full name.';
-            }
-            return null;
-          },
-          onFieldSubmitted: (_) => _save(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(onPressed: _save, child: const Text('Save')),
-      ],
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving ? null : _save,
+              child: Text(saving ? 'Saving…' : 'Save'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -436,28 +552,15 @@ class _CurrentHubTile extends StatelessWidget {
       return Card(
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  const AppIconContainer(icon: Icons.home_outlined),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      "You haven't joined a hub yet.",
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.search_outlined),
-                  label: const Text('Find a hub'),
+              const AppIconContainer(icon: Icons.home_outlined),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "You haven't joined a hub yet.",
+                  style: theme.textTheme.bodyMedium,
                 ),
               ),
             ],

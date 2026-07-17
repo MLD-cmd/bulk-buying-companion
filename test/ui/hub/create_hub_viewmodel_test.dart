@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bulk_buying_companion/data/repositories/hub_repository.dart';
 import 'package:bulk_buying_companion/data/services/location_service.dart';
 import 'package:bulk_buying_companion/models/hub.dart';
@@ -39,7 +41,7 @@ HubDraft _draft({
 
 Future<CreateHubViewModel> _viewModel({
   List<Hub> hubs = const [_magallanes],
-  _FakeLocationService? locationService,
+  LocationService? locationService,
   _FakeHubRepository? hubRepository,
 }) async {
   final viewModel = CreateHubViewModel(
@@ -52,6 +54,59 @@ Future<CreateHubViewModel> _viewModel({
 }
 
 void main() {
+  group('lifecycle safety', () {
+    test('delayed directory completion is ignored after disposal', () async {
+      final repository = _DelayedLifecycleHubRepository(delayDirectory: true);
+      final viewModel = CreateHubViewModel(
+        hubRepository: repository,
+        locationService: _FakeLocationService(),
+      );
+
+      viewModel.dispose();
+      repository.completeDirectory(const [_magallanes]);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(viewModel.existingHubs, isEmpty);
+    });
+
+    test(
+      'delayed location completion does not mutate after disposal',
+      () async {
+        final location = _DelayedLifecycleLocationService();
+        final viewModel = await _viewModel(locationService: location);
+
+        final pending = viewModel.useMyLocation();
+        expect(viewModel.isLocating, isTrue);
+        viewModel.dispose();
+        location.complete(
+          const Coordinates(latitude: 10.31, longitude: 123.91),
+        );
+
+        await expectLater(pending, completes);
+        expect(viewModel.capturedLocation, isNull);
+        expect(viewModel.isLocating, isTrue);
+      },
+    );
+
+    test('delayed submit completion does not mutate after disposal', () async {
+      final repository = _DelayedLifecycleHubRepository();
+      final viewModel = CreateHubViewModel(
+        hubRepository: repository,
+        locationService: _FakeLocationService(),
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final pending = viewModel.submit(_draft());
+      expect(viewModel.isSubmitting, isTrue);
+      viewModel.dispose();
+      repository.completeCreate(_draft());
+
+      await expectLater(pending, completion(isNull));
+      expect(viewModel.isSubmitting, isTrue);
+      expect(viewModel.errorMessage, isNull);
+    });
+  });
+
   group('validation', () {
     test('rejects an empty or too-short name', () async {
       final viewModel = await _viewModel();
@@ -231,6 +286,53 @@ void main() {
       expect(viewModel.existingHubs, isEmpty);
     });
   });
+}
+
+class _DelayedLifecycleLocationService implements LocationService {
+  final _completer = Completer<Coordinates>();
+
+  void complete(Coordinates coordinates) => _completer.complete(coordinates);
+
+  @override
+  Future<Coordinates> getCurrentPosition() => _completer.future;
+}
+
+class _DelayedLifecycleHubRepository implements HubRepository {
+  _DelayedLifecycleHubRepository({this.delayDirectory = false});
+
+  final bool delayDirectory;
+  final _directoryCompleter = Completer<List<Hub>>();
+  final _createCompleter = Completer<Hub>();
+
+  void completeDirectory(List<Hub> hubs) => _directoryCompleter.complete(hubs);
+
+  void completeCreate(HubDraft draft) => _createCompleter.complete(
+    Hub(
+      id: hubSlug(draft.name),
+      name: draft.name.trim(),
+      type: draft.type,
+      memberCount: 0,
+      distanceLabel: '',
+      latitude: draft.latitude,
+      longitude: draft.longitude,
+    ),
+  );
+
+  @override
+  Future<List<Hub>> getHubs() =>
+      delayDirectory ? _directoryCompleter.future : Future.value(const []);
+
+  @override
+  Future<Hub> createHub(HubDraft draft) => _createCompleter.future;
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
 }
 
 class _FakeHubRepository implements HubRepository {

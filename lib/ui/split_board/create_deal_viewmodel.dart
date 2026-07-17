@@ -19,6 +19,7 @@ class CreateDealViewModel extends ChangeNotifier {
 
   bool _isSubmitting = false;
   String? _errorMessage;
+  bool _disposed = false;
 
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
@@ -257,7 +258,7 @@ class CreateDealViewModel extends ChangeNotifier {
   /// Returns the published deal, or null when it was rejected. The reason is
   /// exposed on [errorMessage].
   Future<Deal?> submit(DealDraft draft) async {
-    if (_isSubmitting) return null;
+    if (_disposed || _isSubmitting) return null;
 
     _isSubmitting = true;
     _errorMessage = null;
@@ -266,14 +267,25 @@ class CreateDealViewModel extends ChangeNotifier {
     try {
       return await _dealRepository.createDeal(draft);
     } on DealFailure catch (error) {
+      if (_disposed) return null;
       _errorMessage = error.message;
       return null;
     } catch (_) {
+      if (_disposed) return null;
       _errorMessage = 'Could not publish the deal. Please try again.';
       return null;
     } finally {
-      _isSubmitting = false;
-      notifyListeners();
+      if (!_disposed) {
+        _isSubmitting = false;
+        notifyListeners();
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    super.dispose();
   }
 }

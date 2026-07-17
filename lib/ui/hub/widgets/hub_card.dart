@@ -16,13 +16,20 @@ class HubCard extends StatelessWidget {
     required this.onConfirmSwitch,
     required this.onCancelSwitch,
     this.isBusy = false,
-  });
+    this.isUpdatingThisHub = false,
+    this.busyLabel,
+  }) : assert(
+         !isUpdatingThisHub || busyLabel != null,
+         'The active hub update needs a visible busy label.',
+       );
 
   final Hub hub;
   final bool isJoined;
   final bool isPendingSwitch;
   final bool showSwitchAction;
   final bool isBusy;
+  final bool isUpdatingThisHub;
+  final String? busyLabel;
   final VoidCallback onJoin;
   final VoidCallback onRequestSwitch;
   final VoidCallback onConfirmSwitch;
@@ -37,7 +44,9 @@ class HubCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final stackAction = constraints.maxWidth < 390 || textScale > 1.3;
+            final stackAction =
+                constraints.maxWidth < (isPendingSwitch ? 430 : 300) ||
+                textScale > 1.3;
             final summary = _HubSummary(hub: hub);
             final action = _buildAction(context);
 
@@ -67,6 +76,34 @@ class HubCard extends StatelessWidget {
 
   Widget _buildAction(BuildContext context) {
     final theme = Theme.of(context);
+
+    if (!isJoined && isUpdatingThisHub) {
+      final spinner = ExcludeSemantics(
+        child: SizedBox.square(
+          dimension: 18,
+          child: CircularProgressIndicator(
+            color: theme.colorScheme.primary,
+            strokeWidth: 2.2,
+          ),
+        ),
+      );
+
+      if (showSwitchAction) {
+        return OutlinedButton.icon(
+          onPressed: null,
+          icon: spinner,
+          label: Text(busyLabel!),
+          style: _compactActionStyle,
+        );
+      }
+
+      return FilledButton.icon(
+        onPressed: null,
+        icon: spinner,
+        label: Text(busyLabel!),
+        style: _compactActionStyle,
+      );
+    }
 
     if (isJoined) {
       return Container(
@@ -109,10 +146,12 @@ class HubCard extends StatelessWidget {
         children: [
           OutlinedButton(
             onPressed: isBusy ? null : onCancelSwitch,
+            style: _compactActionStyle,
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: isBusy ? null : onConfirmSwitch,
+            style: _compactActionStyle,
             child: const Text('Confirm switch'),
           ),
         ],
@@ -122,6 +161,7 @@ class HubCard extends StatelessWidget {
     if (showSwitchAction) {
       return OutlinedButton(
         onPressed: isBusy ? null : onRequestSwitch,
+        style: _compactActionStyle,
         child: const Text('Switch'),
       );
     }
@@ -129,9 +169,17 @@ class HubCard extends StatelessWidget {
     return FilledButton(
       key: const Key('hub-join-button'),
       onPressed: isBusy ? null : onJoin,
+      style: _compactActionStyle,
       child: const Text('Join'),
     );
   }
+
+  static const _compactActionStyle = ButtonStyle(
+    minimumSize: WidgetStatePropertyAll(Size(48, 48)),
+    padding: WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    ),
+  );
 }
 
 class _HubSummary extends StatelessWidget {
