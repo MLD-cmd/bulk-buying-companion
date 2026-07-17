@@ -35,7 +35,9 @@ void main() {
           availableSlots: 3,
           totalSlots: 7,
           pickupLocation: 'University main gate',
-          closesAt: DateTime(2026, 7, 18, 16),
+          // Relative: a fixed date passes and quietly changes what the card
+          // renders, which is what this test is measuring.
+          closesAt: DateTime.now().add(const Duration(days: 30)),
         ),
       ),
     );

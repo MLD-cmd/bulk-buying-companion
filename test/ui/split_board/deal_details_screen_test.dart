@@ -659,7 +659,13 @@ void main() {
 
     // Pickup details.
     expect(find.text('USJR Main Gate'), findsOneWidget);
-    expect(find.text('Closes 7/16/2026'), findsOneWidget);
+    expect(
+      find.text(
+        'Closes ${_dealClosesAt.month}/${_dealClosesAt.day}/'
+        '${_dealClosesAt.year}',
+      ),
+      findsOneWidget,
+    );
 
     // Reservation button.
     expect(find.text('Reserve a slot'), findsOneWidget);
@@ -1042,6 +1048,10 @@ class _ScreenReservationRepository implements ReservationRepository {
   Future<Deal> cancelDeal(String dealId) => _delegate.cancelDeal(dealId);
 }
 
+/// Relative to now on purpose. A fixed calendar date silently passes, which
+/// closes the deal and hides the reservation actions these tests assert on.
+final _dealClosesAt = DateTime.now().add(const Duration(days: 30));
+
 final _deal = Deal(
   id: 'colon-rice',
   hubId: 'colon',
@@ -1055,7 +1065,7 @@ final _deal = Deal(
   availableSlots: 3,
   totalSlots: 5,
   pickupLocation: 'USJR Main Gate',
-  closesAt: DateTime(2026, 7, 16, 23, 59),
+  closesAt: _dealClosesAt,
 );
 
 const _bulk = Deal(
