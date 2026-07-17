@@ -96,5 +96,27 @@ void main() {
 
       expect(user.displayName, 'Jay Student');
     });
+
+    test(
+      'updates the signed-in display name and publishes the change',
+      () async {
+        final states = <String?>[];
+        final subscription = repository.authStateChanges.listen(
+          (user) => states.add(user?.displayName),
+        );
+        await repository.signIn(
+          email: 'student@usjr.edu.ph',
+          password: 'Student123',
+        );
+
+        final user = await repository.updateDisplayName(' Updated Student ');
+        await Future<void>.delayed(Duration.zero);
+
+        expect(user.displayName, 'Updated Student');
+        expect(repository.currentUser?.displayName, 'Updated Student');
+        expect(states, ['Sample Student', 'Updated Student']);
+        await subscription.cancel();
+      },
+    );
   });
 }

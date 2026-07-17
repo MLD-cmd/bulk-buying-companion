@@ -15,6 +15,8 @@ import 'package:bulk_buying_companion/ui/shared/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:bulk_buying_companion/data/repositories/notification_repository.dart';
+import 'package:bulk_buying_companion/models/deal_notification.dart';
 
 void main() {
   testWidgets(
@@ -444,6 +446,149 @@ void main() {
     );
     expect(search.decoration?.hintText, 'Search hubs, buildings, areas…');
     expect(search.decoration?.labelText, isNull);
+  });
+
+  testWidgets('current hub exposes notifications', (tester) async {
+    final authRepository = MockAuthRepository();
+    await authRepository.signIn(
+      email: 'student@usjr.edu.ph',
+      password: 'Student123',
+    );
+    final hubRepository = MockHubRepository();
+    await hubRepository.joinHub(
+      userId: authRepository.currentUser!.uid,
+      hubId: 'colon',
+    );
+    final viewModel = JoinHubViewModel(
+      authRepository: authRepository,
+      hubRepository: hubRepository,
+      locationService: const _LocationStub(),
+    );
+    addTearDown(viewModel.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<AuthRepository>.value(value: authRepository),
+          Provider<NotificationRepository>.value(
+            value: const _NotificationStub([]),
+          ),
+          ChangeNotifierProvider.value(value: viewModel),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const JoinHubScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Notifications'), findsOneWidget);
+  });
+
+  testWidgets('new realtime notifications show a popup', (tester) async {
+    final authRepository = MockAuthRepository();
+    await authRepository.signIn(
+      email: 'student@usjr.edu.ph',
+      password: 'Student123',
+    );
+    final hubRepository = MockHubRepository();
+    await hubRepository.joinHub(
+      userId: authRepository.currentUser!.uid,
+      hubId: 'colon',
+    );
+    final viewModel = JoinHubViewModel(
+      authRepository: authRepository,
+      hubRepository: hubRepository,
+      locationService: const _LocationStub(),
+    );
+    final notifications = StreamController<List<DealNotification>>();
+    addTearDown(viewModel.dispose);
+    addTearDown(notifications.close);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<AuthRepository>.value(value: authRepository),
+          Provider<NotificationRepository>.value(
+            value: _StreamingNotificationStub(notifications.stream),
+          ),
+          ChangeNotifierProvider.value(value: viewModel),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const JoinHubScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    notifications.add(const []);
+    await tester.pump();
+    expect(find.text('Payment reminder'), findsNothing);
+
+    notifications.add(const [
+      DealNotification(
+        id: 'deal-1-payment',
+        dealId: 'deal-1',
+        kind: DealNotificationKind.paymentReminder,
+        title: 'Payment reminder',
+        message: 'Pay P100 for Rice.',
+      ),
+    ]);
+    await tester.pump();
+
+    expect(find.text('Payment reminder'), findsOneWidget);
+    expect(find.text('Pay P100 for Rice.'), findsOneWidget);
+  });
+
+  testWidgets('notification bell shows an unread indicator count', (
+    tester,
+  ) async {
+    final authRepository = MockAuthRepository();
+    await authRepository.signIn(
+      email: 'student@usjr.edu.ph',
+      password: 'Student123',
+    );
+    final hubRepository = MockHubRepository();
+    await hubRepository.joinHub(
+      userId: authRepository.currentUser!.uid,
+      hubId: 'colon',
+    );
+    final viewModel = JoinHubViewModel(
+      authRepository: authRepository,
+      hubRepository: hubRepository,
+      locationService: const _LocationStub(),
+    );
+    addTearDown(viewModel.dispose);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<AuthRepository>.value(value: authRepository),
+          Provider<NotificationRepository>.value(
+            value: const _NotificationStub([
+              DealNotification(
+                id: 'deal-1-payment',
+                dealId: 'deal-1',
+                kind: DealNotificationKind.paymentReminder,
+                title: 'Payment reminder',
+                message: 'Pay P100 for Rice.',
+              ),
+            ]),
+          ),
+          ChangeNotifierProvider.value(value: viewModel),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const JoinHubScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('notification-badge')), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
   });
 
   testWidgets('hub registration centers location and keeps coordinates', (
@@ -1535,8 +1680,9 @@ Future<JoinHubViewModel> _pumpJoinHubScreen(
   AuthRepository? authRepository,
   LocationService? locationService,
 }) async {
+  final auth = authRepository ?? _SignedInAuthRepository();
   final viewModel = JoinHubViewModel(
-    authRepository: authRepository ?? _SignedInAuthRepository(),
+    authRepository: auth,
     hubRepository: repository,
     locationService:
         locationService ??
@@ -1556,6 +1702,11 @@ Future<JoinHubViewModel> _pumpJoinHubScreen(
         ChangeNotifierProvider<JoinHubViewModel>.value(value: viewModel),
         // The Register-a-hub route builds its own CreateHubViewModel from these.
         Provider<HubRepository>.value(value: repository),
+        // The notification bell in the app bar reads these.
+        Provider<AuthRepository>.value(value: auth),
+        Provider<NotificationRepository>.value(
+          value: const _NotificationStub([]),
+        ),
         Provider<LocationService>.value(
           value:
               locationService ??
@@ -1620,6 +1771,11 @@ class _SignedInAuthRepository implements AuthRepository {
 
   @override
   void dispose() {}
+
+  @override
+  Future<AppUser> updateDisplayName(String displayName) {
+    throw UnimplementedError();
+  }
 }
 
 class _ControlledAuthRepository implements AuthRepository {
@@ -1659,6 +1815,11 @@ class _ControlledAuthRepository implements AuthRepository {
 
   @override
   void dispose() => _controller.close();
+
+  @override
+  Future<AppUser> updateDisplayName(String displayName) {
+    throw UnimplementedError();
+  }
 }
 
 class _ControlledHubRepository implements HubRepository {
@@ -1735,5 +1896,49 @@ class _ControlledLocationService implements LocationService {
     final currentFailure = failure;
     if (currentFailure != null) throw currentFailure;
     return result!;
+  }
+}
+
+class _NotificationStub implements NotificationRepository {
+  const _NotificationStub(this.notifications);
+
+  final List<DealNotification> notifications;
+
+  @override
+  Future<List<DealNotification>> getNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) async {
+    return notifications;
+  }
+
+  @override
+  Stream<List<DealNotification>> watchNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) {
+    return Stream.value(notifications);
+  }
+}
+
+class _StreamingNotificationStub implements NotificationRepository {
+  const _StreamingNotificationStub(this.stream);
+
+  final Stream<List<DealNotification>> stream;
+
+  @override
+  Future<List<DealNotification>> getNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) async {
+    return const [];
+  }
+
+  @override
+  Stream<List<DealNotification>> watchNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) {
+    return stream;
   }
 }

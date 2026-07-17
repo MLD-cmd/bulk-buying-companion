@@ -75,6 +75,8 @@ abstract class AuthRepository {
     required String password,
   });
 
+  Future<AppUser> updateDisplayName(String displayName);
+
   Future<void> signOut();
 
   void dispose();
@@ -153,6 +155,35 @@ class MockAuthRepository implements AuthRepository {
     _accounts[normalizedEmail] = _MockAccount(user: user, password: password);
     _setUser(user);
     return AuthRegistrationResult(user: user, requiresEmailConfirmation: false);
+  }
+
+  @override
+  Future<AppUser> updateDisplayName(String displayName) async {
+    final user = _user;
+    if (user == null) {
+      throw const AuthFailure('Sign in before editing your profile.');
+    }
+
+    final trimmed = displayName.trim();
+    if (trimmed.isEmpty) {
+      throw const AuthFailure('Enter your full name.');
+    }
+
+    final updated = AppUser(
+      uid: user.uid,
+      eduEmail: user.eduEmail,
+      displayName: trimmed,
+      hubId: user.hubId,
+    );
+    final account = _accounts[user.eduEmail];
+    if (account != null) {
+      _accounts[user.eduEmail] = _MockAccount(
+        user: updated,
+        password: account.password,
+      );
+    }
+    _setUser(updated);
+    return updated;
   }
 
   @override

@@ -14,11 +14,18 @@ class SplitBoardViewModel extends ChangeNotifier {
     required this.hubName,
   }) : _dealRepository = dealRepository,
        _hubId = hubId {
-    _load();
+    // The first emission answers a read issued right here, so it is subject to
+    // the same generation check as any other read: a refresh started while it
+    // was in flight is newer and must win. Later emissions are live pushes.
+    _subscribeGeneration = ++_loadGeneration;
+    _subscription = _dealRepository
+        .watchDeals(_hubId)
+        .listen(_setDeals, onError: (_) => _setError());
   }
 
   final DealRepository _dealRepository;
   final String _hubId;
+  late final StreamSubscription<List<Deal>> _subscription;
 
   /// Name of the hub whose deals are shown, used in the screen header.
   final String hubName;
@@ -30,6 +37,8 @@ class SplitBoardViewModel extends ChangeNotifier {
   String? _refreshErrorMessage;
   Future<void>? _refreshOperation;
   int _loadGeneration = 0;
+  late final int _subscribeGeneration;
+  bool _awaitingFirstEmission = true;
   bool _isDisposed = false;
   String _searchQuery = '';
   DealCategory? _categoryFilter;
@@ -75,32 +84,6 @@ class SplitBoardViewModel extends ChangeNotifier {
       _searchQuery.trim().isNotEmpty ||
       _categoryFilter != null ||
       _statusFilter != null;
-
-  Future<void> _load() async {
-    if (_isDisposed) return;
-    final generation = ++_loadGeneration;
-    _isLoading = true;
-    _hasError = false;
-    _refreshErrorMessage = null;
-    _notifyListeners();
-
-    try {
-      final loadedDeals = await _dealRepository.getDeals(_hubId);
-      if (!_canCommit(generation)) return;
-      _deals = loadedDeals;
-      _hasError = false;
-      _refreshErrorMessage = null;
-    } catch (_) {
-      if (!_canCommit(generation)) return;
-      _hasError = true;
-      _refreshErrorMessage = null;
-    } finally {
-      if (_canCommit(generation)) {
-        _isLoading = false;
-        _notifyListeners();
-      }
-    }
-  }
 
   /// Re-fetches the hub's deals. Wired to both the pull-to-refresh gesture
   /// and the retry action on the error state.
@@ -217,8 +200,46 @@ class SplitBoardViewModel extends ChangeNotifier {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
+    // Retires any in-flight refresh: _canCommit compares against this.
     _loadGeneration++;
+    _subscription.cancel();
     super.dispose();
+  }
+
+  void _setDeals(List<Deal> deals) {
+    if (_isDisposed) return;
+    final wasFirst = _awaitingFirstEmission;
+    _awaitingFirstEmission = false;
+    // Only the first emission can be stale; a later push is newer than any read
+    // already in flight, so it retires them instead of deferring to them.
+    if (wasFirst) {
+      if (!_canCommit(_subscribeGeneration)) return;
+    } else {
+      _loadGeneration++;
+    }
+
+    _deals = deals;
+    _hasError = false;
+    // Fresh deals arrived, so "showing the deals already loaded" is no longer
+    // true — the stream has overtaken whatever refresh failed.
+    _refreshErrorMessage = null;
+    _isLoading = false;
+    _isRefreshing = false;
+    _refreshOperation = null;
+    _notifyListeners();
+  }
+
+  void _setError() {
+    if (_isDisposed) return;
+    final wasFirst = _awaitingFirstEmission;
+    _awaitingFirstEmission = false;
+    if (wasFirst && !_canCommit(_subscribeGeneration)) return;
+
+    // Keeps whatever is already on the board: a dropped stream is a failure to
+    // read the deals, not word that there are none.
+    if (_deals.isEmpty) _hasError = true;
+    _isLoading = false;
+    _notifyListeners();
   }
 
   int _compareDeadlines(Deal a, Deal b) {

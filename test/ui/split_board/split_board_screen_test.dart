@@ -700,6 +700,11 @@ class _FakeDealRepository implements DealRepository {
   Future<List<Deal>> getDeals(String hubId) async => _deals;
 
   @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
   Future<Deal> createDeal(DealDraft draft) {
     throw UnimplementedError();
   }
@@ -720,6 +725,12 @@ class _SequencedDealRepository implements DealRepository {
   @override
   Future<Deal> createDeal(DealDraft draft) async {
     return createdDeal ?? (throw UnimplementedError());
+  }
+
+  /// The default on [DealRepository]; `implements` does not inherit it.
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
   }
 }
 

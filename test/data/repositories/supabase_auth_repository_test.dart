@@ -200,6 +200,19 @@ void main() {
 
       expect(gateway.signOutCalls, 1);
     });
+
+    test('updates display name metadata', () async {
+      gateway.updatedIdentity = const SupabaseAuthIdentity(
+        id: 'user-5',
+        email: 'student@example.com',
+        metadata: {'display_name': 'Updated Student'},
+      );
+
+      final user = await repository.updateDisplayName(' Updated Student ');
+
+      expect(gateway.lastDisplayName, 'Updated Student');
+      expect(user.displayName, 'Updated Student');
+    });
   });
 
   group('GoTrueSupabaseAuthGateway', () {
@@ -241,12 +254,17 @@ void main() {
         password: 'Password1',
         displayName: 'Jay Student',
       );
+      final updated = await gateway.updateDisplayName('Updated Student');
       await gateway.signOut();
 
       expect(signIn.identity.id, 'supabase-user');
       expect(signIn.hasSession, isTrue);
       expect(signUp.identity.id, 'supabase-user');
-      expect(client.lastMetadata, {'display_name': 'Jay Student'});
+      expect(updated.metadata['display_name'], 'Updated Student');
+      expect(client.metadataCalls, [
+        {'display_name': 'Jay Student'},
+        {'display_name': 'Updated Student'},
+      ]);
       expect(client.signOutCalls, 1);
     });
 
@@ -293,6 +311,7 @@ class _FakeSupabaseAuthGateway implements SupabaseAuthGateway {
   SupabaseAuthIdentity? user;
   SupabaseAuthGatewayResponse? nextResponse;
   SupabaseAuthGatewayException? nextError;
+  SupabaseAuthIdentity? updatedIdentity;
   String? lastEmail;
   String? lastPassword;
   String? lastDisplayName;
@@ -342,6 +361,15 @@ class _FakeSupabaseAuthGateway implements SupabaseAuthGateway {
     if (error != null) throw error;
   }
 
+  @override
+  Future<SupabaseAuthIdentity> updateDisplayName(String displayName) async {
+    lastDisplayName = displayName;
+    final error = nextError;
+    nextError = null;
+    if (error != null) throw error;
+    return updatedIdentity!;
+  }
+
   void dispose() => _controller.close();
 }
 
@@ -352,7 +380,7 @@ class _FakeGoTrueClient extends GoTrueClient {
   User? user;
   AuthResponse response = AuthResponse();
   AuthException? error;
-  Map<String, dynamic>? lastMetadata;
+  final List<Map<String, dynamic>?> metadataCalls = [];
   int signOutCalls = 0;
 
   @override
@@ -384,9 +412,26 @@ class _FakeGoTrueClient extends GoTrueClient {
     String? captchaToken,
     OtpChannel channel = OtpChannel.sms,
   }) async {
-    lastMetadata = data;
+    metadataCalls.add(data);
     if (error case final error?) throw error;
     return response;
+  }
+
+  @override
+  Future<UserResponse> updateUser(
+    UserAttributes attributes, {
+    String? emailRedirectTo,
+  }) async {
+    metadataCalls.add(attributes.data as Map<String, dynamic>?);
+    if (error case final error?) throw error;
+    return UserResponse.fromJson({
+      'id': 'supabase-user',
+      'app_metadata': <String, dynamic>{},
+      'user_metadata': {'display_name': 'Updated Student'},
+      'aud': 'authenticated',
+      'email': 'student@example.com',
+      'created_at': '2026-07-12T00:00:00Z',
+    });
   }
 
   @override

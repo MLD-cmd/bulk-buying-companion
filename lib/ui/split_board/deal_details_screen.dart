@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/reservation_repository.dart';
+import '../../data/repositories/report_repository.dart';
 import '../../models/deal.dart';
 import '../../models/reservation.dart';
 import '../shared/app_banner.dart';
@@ -86,6 +87,12 @@ class _DealDetailsScreenState extends State<DealDetailsScreen> {
             appBar: AppBar(
               title: const Text('Deal details'),
               actions: [
+                TextButton.icon(
+                  key: const Key('detail-report-button'),
+                  onPressed: () => _showReportSheet(context, viewModel),
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Report'),
+                ),
                 Semantics(
                   key: const Key('detail-help-button-semantics'),
                   label: DealDetailsScreen._helpLabel,
@@ -143,6 +150,11 @@ class _DealDetailsScreenState extends State<DealDetailsScreen> {
                           ],
                           const SizedBox(height: 24),
                           _CostCard(deal: deal),
+                          if (viewModel.isHost || viewModel.holdsSlot) ...[
+                            const SizedBox(height: 24),
+                            const _SectionLabel('Payment'),
+                            _PaymentInfo(deal: deal),
+                          ],
                           const SizedBox(height: 24),
                           const _SectionLabel('Slots'),
                           _SlotsRow(deal: deal),
@@ -160,7 +172,11 @@ class _DealDetailsScreenState extends State<DealDetailsScreen> {
                             keyValue: const Key('detail-deadline'),
                           ),
                           const SizedBox(height: 28),
-                          const _SectionLabel('Who is in'),
+                          _SectionLabel(
+                            viewModel.isPurchased
+                                ? 'Pickup checklist'
+                                : 'Who is in',
+                          ),
                           _Participants(
                             key: const Key('detail-participants'),
                             viewModel: viewModel,
@@ -381,6 +397,37 @@ class _DealDetailsScreenState extends State<DealDetailsScreen> {
       _cancelDealDialogInFlight = false;
     }
   }
+
+  Future<void> _showReportSheet(
+    BuildContext context,
+    DealDetailsViewModel viewModel,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final repository = context.read<ReportRepository>();
+    final deal = viewModel.deal;
+
+    final submitted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _ReportSheet(
+        deal: deal,
+        currentUserId: viewModel.currentUserId,
+        participants: viewModel.participants,
+        repository: repository,
+      ),
+    );
+
+    if (submitted == true) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Report submitted. Thanks for helping keep this hub safe.',
+          ),
+        ),
+      );
+    }
+  }
 }
 
 class _LifecycleActions extends StatelessWidget {
@@ -481,6 +528,310 @@ class _LifecycleActions extends StatelessWidget {
     if (viewModel.isFull) return 'No slots left';
     if (viewModel.deadlinePassed) return 'Deadline passed';
     return 'Reserve a slot';
+  }
+}
+
+class _ReportSheet extends StatefulWidget {
+  const _ReportSheet({
+    required this.deal,
+    required this.currentUserId,
+    required this.participants,
+    required this.repository,
+  });
+
+  final Deal deal;
+  final String? currentUserId;
+  final List<Reservation> participants;
+  final ReportRepository repository;
+
+  @override
+  State<_ReportSheet> createState() => _ReportSheetState();
+}
+
+class _ReportSheetState extends State<_ReportSheet> {
+  final _controller = TextEditingController();
+  var _targetType = ReportTargetType.deal;
+  String? _reportedUserId;
+  ReportReason? _reason;
+  bool _isSubmitting = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final reportableUsers = _reportableUsers;
+    final canReportUser = reportableUsers.isNotEmpty;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Report deal or user', style: theme.textTheme.titleLarge),
+                const SizedBox(height: 6),
+                Text(
+                  'Reports help moderators review suspicious deals, inappropriate content, or problematic users.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'What are you reporting?',
+                  style: theme.textTheme.titleSmall,
+                ),
+                RadioListTile<ReportTargetType>(
+                  contentPadding: EdgeInsets.zero,
+                  value: ReportTargetType.deal,
+                  groupValue: _targetType,
+                  onChanged: _isSubmitting ? null : _setTargetType,
+                  title: const Text('Report this deal'),
+                ),
+                if (canReportUser)
+                  RadioListTile<ReportTargetType>(
+                    contentPadding: EdgeInsets.zero,
+                    value: ReportTargetType.user,
+                    groupValue: _targetType,
+                    onChanged: _isSubmitting ? null : _setTargetType,
+                    title: const Text('Report a user'),
+                  ),
+                if (_targetType == ReportTargetType.user && canReportUser) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Who are you reporting?',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                  for (final participant in reportableUsers)
+                    RadioListTile<String>(
+                      key: Key('report-user-${participant.userId}'),
+                      contentPadding: EdgeInsets.zero,
+                      value: participant.userId,
+                      groupValue: _reportedUserId,
+                      onChanged: _isSubmitting ? null : _setReportedUser,
+                      title: Text(participant.displayName),
+                      subtitle: participant.isHost
+                          ? const Text('Organiser')
+                          : null,
+                    ),
+                ],
+                const SizedBox(height: 10),
+                Text('Reason', style: theme.textTheme.titleSmall),
+                for (final item in ReportReason.values)
+                  RadioListTile<ReportReason>(
+                    contentPadding: EdgeInsets.zero,
+                    value: item,
+                    groupValue: _reason,
+                    onChanged: _isSubmitting ? null : _setReason,
+                    title: Text(item.label),
+                  ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const Key('report-explanation-field'),
+                  controller: _controller,
+                  minLines: 3,
+                  maxLines: 5,
+                  enabled: !_isSubmitting,
+                  decoration: const InputDecoration(
+                    labelText: 'Optional explanation',
+                    alignLabelWithHint: true,
+                    prefixIcon: Icon(Icons.notes_outlined),
+                  ),
+                ),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  AppBanner.error(message: _errorMessage!),
+                ],
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  key: const Key('submit-report-button'),
+                  onPressed:
+                      _reason == null ||
+                          _isSubmitting ||
+                          (_targetType == ReportTargetType.user &&
+                              _reportedUserId == null)
+                      ? null
+                      : _submit,
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.flag_outlined),
+                  label: Text(
+                    _isSubmitting ? 'Submitting...' : 'Submit report',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setTargetType(ReportTargetType? value) {
+    if (value == null) return;
+    setState(() {
+      _targetType = value;
+      if (value == ReportTargetType.deal) {
+        _reportedUserId = null;
+      } else {
+        final users = _reportableUsers;
+        if (_reportedUserId == null && users.isNotEmpty) {
+          _reportedUserId = users.first.userId;
+        }
+      }
+    });
+  }
+
+  void _setReportedUser(String? value) {
+    if (value == null) return;
+    setState(() => _reportedUserId = value);
+  }
+
+  void _setReason(ReportReason? value) {
+    setState(() => _reason = value);
+  }
+
+  Future<void> _submit() async {
+    final selectedReason = _reason;
+    if (selectedReason == null || _isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      await widget.repository.submitReport(
+        ReportDraft(
+          dealId: widget.deal.id,
+          targetType: _targetType,
+          reportedUserId: _targetType == ReportTargetType.user
+              ? _reportedUserId
+              : null,
+          reason: selectedReason,
+          explanation: _controller.text,
+        ),
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on ReportFailure catch (failure) {
+      setState(() {
+        _errorMessage = failure.message;
+        _isSubmitting = false;
+      });
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'Could not submit the report. Please try again.';
+        _isSubmitting = false;
+      });
+    }
+  }
+
+  List<Reservation> get _reportableUsers {
+    final byUserId = <String, Reservation>{};
+    for (final participant in widget.participants) {
+      byUserId.putIfAbsent(participant.userId, () => participant);
+    }
+
+    final hostId = widget.deal.createdBy;
+    final hostName = widget.deal.hostName;
+    if (hostId != null) {
+      byUserId.putIfAbsent(
+        hostId,
+        () => Reservation(
+          dealId: widget.deal.id,
+          userId: hostId,
+          studentName: hostName,
+          isHost: true,
+          reservedAt: DateTime.fromMillisecondsSinceEpoch(0),
+        ),
+      );
+    }
+
+    final users = byUserId.values.toList();
+    users.sort((a, b) {
+      if (a.isHost != b.isHost) return a.isHost ? -1 : 1;
+      return a.displayName.compareTo(b.displayName);
+    });
+    return users;
+  }
+}
+
+class _PaymentInfo extends StatelessWidget {
+  const _PaymentInfo({required this.deal});
+
+  final Deal deal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DetailRow(
+          icon: Icons.payments_outlined,
+          label: 'Amount owed: ${formatPeso(deal.pricePerShare)}',
+          keyValue: const Key('detail-payment-amount'),
+        ),
+        if (deal.hasPaymentInfo) ...[
+          if (_hasText(deal.paymentMethod)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.account_balance_wallet_outlined,
+              label: deal.paymentMethod!.trim(),
+              keyValue: const Key('detail-payment-method'),
+            ),
+          ],
+          if (_hasText(deal.paymentAccountName)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.badge_outlined,
+              label: deal.paymentAccountName!.trim(),
+              keyValue: const Key('detail-payment-account-name'),
+            ),
+          ],
+          if (_hasText(deal.paymentAccountHandle)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.tag_outlined,
+              label: deal.paymentAccountHandle!.trim(),
+              keyValue: const Key('detail-payment-account-handle'),
+            ),
+          ],
+          if (_hasText(deal.paymentInstructions)) ...[
+            const SizedBox(height: 10),
+            _DetailRow(
+              icon: Icons.notes_outlined,
+              label: deal.paymentInstructions!.trim(),
+              keyValue: const Key('detail-payment-instructions'),
+            ),
+          ],
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'No payment instructions added yet.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 
@@ -591,6 +942,8 @@ class _CostCard extends StatelessWidget {
     );
   }
 }
+
+bool _hasText(String? value) => value?.trim().isNotEmpty == true;
 
 class _SlotsRow extends StatelessWidget {
   const _SlotsRow({required this.deal});
@@ -714,6 +1067,17 @@ class _Participants extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
+        if (viewModel.pickupProgressLabel != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            viewModel.pickupProgressLabel!,
+            key: const Key('detail-pickup-progress-label'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -750,12 +1114,69 @@ class _ParticipantRow extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+              if (participant.collectedAt != null)
+                Text(
+                  _collectedAtLabel(participant.collectedAt!),
+                  key: Key('collected-at-${participant.userId}'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
             ],
           ),
         ),
       ],
     );
-    final controls = Wrap(
+    final controls = _ParticipantControls(
+      viewModel: viewModel,
+      participant: participant,
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 360 || textScale > 1.3) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                identity,
+                const SizedBox(height: 10),
+                Align(alignment: Alignment.centerLeft, child: controls),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: identity),
+              const SizedBox(width: 12),
+              controls,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ParticipantControls extends StatelessWidget {
+  const _ParticipantControls({
+    required this.viewModel,
+    required this.participant,
+  });
+
+  final DealDetailsViewModel viewModel;
+  final Reservation participant;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
       spacing: 8,
       runSpacing: 8,
       alignment: WrapAlignment.end,
@@ -766,30 +1187,30 @@ class _ParticipantRow extends StatelessWidget {
           _CollectedControl(viewModel: viewModel, participant: participant),
       ],
     );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 520 || textScale > 1.3) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              identity,
-              const SizedBox(height: 6),
-              Align(alignment: Alignment.centerRight, child: controls),
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(child: identity),
-            const SizedBox(width: 12),
-            controls,
-          ],
-        );
-      },
-    );
   }
+}
+
+String _collectedAtLabel(DateTime collectedAt) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final hour12 = collectedAt.hour % 12 == 0 ? 12 : collectedAt.hour % 12;
+  final minute = collectedAt.minute.toString().padLeft(2, '0');
+  final period = collectedAt.hour < 12 ? 'AM' : 'PM';
+
+  return 'Collected ${months[collectedAt.month - 1]} ${collectedAt.day}, '
+      '${collectedAt.year} at $hour12:$minute $period';
 }
 
 /// The host taps to mark a payment; everyone else just reads it.
@@ -810,7 +1231,7 @@ class _PaidControl extends StatelessWidget {
       );
     }
 
-    return TextButton(
+    return OutlinedButton.icon(
       key: Key('mark-paid-${participant.userId}'),
       onPressed: viewModel.isUpdating
           ? null
@@ -818,10 +1239,12 @@ class _PaidControl extends StatelessWidget {
               participant.userId,
               paid: !participant.hasPaid,
             ),
-      child: _StateChip(
-        label: participant.hasPaid ? 'Paid' : 'Mark paid',
-        on: participant.hasPaid,
+      icon: Icon(
+        participant.hasPaid
+            ? Icons.remove_done_outlined
+            : Icons.check_circle_outline,
       ),
+      label: Text(participant.hasPaid ? 'Unmark paid' : 'Mark paid'),
     );
   }
 }
@@ -842,7 +1265,7 @@ class _CollectedControl extends StatelessWidget {
       );
     }
 
-    return TextButton(
+    return OutlinedButton.icon(
       key: Key('mark-collected-${participant.userId}'),
       onPressed: viewModel.isUpdating
           ? null
@@ -850,9 +1273,13 @@ class _CollectedControl extends StatelessWidget {
               participant.userId,
               collected: !participant.hasCollected,
             ),
-      child: _StateChip(
-        label: participant.hasCollected ? 'Collected' : 'Mark collected',
-        on: participant.hasCollected,
+      icon: Icon(
+        participant.hasCollected
+            ? Icons.undo_outlined
+            : Icons.inventory_2_outlined,
+      ),
+      label: Text(
+        participant.hasCollected ? 'Unmark collected' : 'Mark collected',
       ),
     );
   }

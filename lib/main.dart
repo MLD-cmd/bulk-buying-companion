@@ -7,7 +7,9 @@ import 'config/supabase_config.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/repositories/deal_repository.dart';
 import 'data/repositories/hub_repository.dart';
+import 'data/repositories/notification_repository.dart';
 import 'data/repositories/reservation_repository.dart';
+import 'data/repositories/report_repository.dart';
 import 'data/repositories/supabase_auth_repository.dart';
 import 'data/services/location_service.dart';
 import 'models/app_user.dart';
@@ -27,14 +29,22 @@ Future<void> main() async {
   );
   final hubRepository = SupabaseHubRepository(
     gateway: PostgrestSupabaseHubGateway(client),
+    invalidationSource: SupabaseHubInvalidationSource(client),
   );
   final dealRepository = SupabaseDealRepository(
     gateway: PostgrestSupabaseDealGateway(client),
     // Read lazily: the student is not signed in yet when the app boots.
     currentUserId: () => client.auth.currentUser!.id,
+    invalidationSource: SupabaseDealInvalidationSource(client),
   );
   final reservationRepository = SupabaseReservationRepository(
     gateway: PostgrestSupabaseReservationGateway(client),
+    invalidationSource: SupabaseReservationInvalidationSource(client),
+  );
+  final reportRepository = SupabaseReportRepository(
+    gateway: PostgrestSupabaseReportGateway(client),
+    currentUserId: () => client.auth.currentUser!.id,
+    invalidationSource: SupabaseReportInvalidationSource(client),
   );
   runApp(
     BulkBuyingCompanionApp(
@@ -42,6 +52,10 @@ Future<void> main() async {
       hubRepository: hubRepository,
       dealRepository: dealRepository,
       reservationRepository: reservationRepository,
+      reportRepository: reportRepository,
+      notificationInvalidationSource: SupabaseNotificationInvalidationSource(
+        client,
+      ),
     ),
   );
 }
@@ -53,6 +67,8 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     this.hubRepository,
     this.dealRepository,
     this.reservationRepository,
+    this.reportRepository,
+    this.notificationInvalidationSource,
     this.locationService,
   });
 
@@ -60,6 +76,8 @@ class BulkBuyingCompanionApp extends StatelessWidget {
   final HubRepository? hubRepository;
   final DealRepository? dealRepository;
   final ReservationRepository? reservationRepository;
+  final ReportRepository? reportRepository;
+  final NotificationInvalidationSource? notificationInvalidationSource;
   final LocationService? locationService;
 
   @override
@@ -88,6 +106,16 @@ class BulkBuyingCompanionApp extends StatelessWidget {
             }
             return repository;
           },
+        ),
+        Provider<ReportRepository>(
+          create: (_) => reportRepository ?? MockReportRepository(),
+        ),
+        Provider<NotificationRepository>(
+          create: (context) => DerivedNotificationRepository(
+            dealRepository: context.read<DealRepository>(),
+            reservationRepository: context.read<ReservationRepository>(),
+            invalidationSource: notificationInvalidationSource,
+          ),
         ),
         Provider<LocationService>(
           create: (_) => locationService ?? const GeolocatorLocationService(),

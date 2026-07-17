@@ -53,6 +53,61 @@ void main() {
       );
     });
 
+    test('deal participant names fall back when display names are missing', () {
+      final all = allMigrations();
+
+      expect(all, contains("split_part(p.email, '@', 1)"));
+      expect(all, contains('as student_name'));
+      expect(all, contains('as host_name'));
+    });
+
+    test('existing auth users with missing profiles are backfilled', () {
+      final all = allMigrations();
+
+      expect(all, contains('from auth.users u'));
+      expect(all, contains('insert into public.profiles'));
+      expect(all, contains('where not exists'));
+    });
+
+    test('deal and user reports are stored behind own-row RLS', () {
+      final all = allMigrations();
+
+      expect(all, contains('create table if not exists public.reports'));
+      expect(
+        all,
+        contains('alter table public.reports enable row level security'),
+      );
+      expect(all, contains('reports insert own row'));
+      expect(all, contains('reports select own rows'));
+      expect(all, contains('reporter_id = (select auth.uid())'));
+      expect(all, contains('reports_reporter_id_idx'));
+      expect(all, contains('reports_deal_id_idx'));
+      expect(all, contains('reports_reported_user_id_idx'));
+      expect(
+        all,
+        contains(
+          'alter publication supabase_realtime add table public.reports',
+        ),
+      );
+    });
+
+    test('publishes realtime source tables used by live screens', () {
+      final all = allMigrations();
+
+      for (final table in [
+        'public.deals',
+        'public.deal_reservations',
+        'public.hubs',
+        'public.hub_memberships',
+        'public.reports',
+      ]) {
+        expect(
+          all,
+          contains('alter publication supabase_realtime add table $table'),
+        );
+      }
+    });
+
     test('rejects sub-centavo deal prices in schema source', () {
       final all = allMigrations();
 

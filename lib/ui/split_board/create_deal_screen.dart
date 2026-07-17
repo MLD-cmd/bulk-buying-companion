@@ -29,6 +29,11 @@ const _postDealHelpSteps = [
     body: 'Choose where members collect and optionally set when claims close.',
   ),
   TaskHelpStep(
+    icon: Icons.payments_outlined,
+    title: 'Payment',
+    body: 'Optionally say how and where students should send their share.',
+  ),
+  TaskHelpStep(
     icon: Icons.fact_check_outlined,
     title: 'Review',
     body: 'Check what each student pays and receives before posting.',
@@ -73,6 +78,10 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
   final _amountController = TextEditingController();
   final _totalSlotsController = TextEditingController();
   final _pickupLocationController = TextEditingController();
+  final _paymentMethodController = TextEditingController();
+  final _paymentAccountNameController = TextEditingController();
+  final _paymentAccountHandleController = TextEditingController();
+  final _paymentInstructionsController = TextEditingController();
 
   final _titleFocusNode = FocusNode();
   final _descriptionFocusNode = FocusNode();
@@ -106,6 +115,10 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
     _amountFocusNode.dispose();
     _totalSlotsFocusNode.dispose();
     _pickupLocationFocusNode.dispose();
+    _paymentMethodController.dispose();
+    _paymentAccountNameController.dispose();
+    _paymentAccountHandleController.dispose();
+    _paymentInstructionsController.dispose();
     super.dispose();
   }
 
@@ -388,6 +401,95 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 16),
+                          RepaintBoundary(
+                            key: const Key('deal-payment-repaint-boundary'),
+                            child: AppFormSection(
+                              title: 'Payment',
+                              description:
+                                  'Add manual payment instructions for students who claim a slot.',
+                              icon: Icons.payments_outlined,
+                              children: [
+                                _AdaptivePair(
+                                  first: TextFormField(
+                                    key: const Key('deal-payment-method-field'),
+                                    controller: _paymentMethodController,
+                                    enabled: !submissionLocked,
+                                    textCapitalization:
+                                        TextCapitalization.words,
+                                    textInputAction: TextInputAction.next,
+                                    onChanged: (_) => _markDirty(),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Payment method (optional)',
+                                      hintText:
+                                          'GCash, Maya, bank transfer, cash',
+                                      prefixIcon: Icon(
+                                        Icons.account_balance_wallet_outlined,
+                                      ),
+                                    ),
+                                    validator: viewModel.validatePaymentMethod,
+                                  ),
+                                  second: TextFormField(
+                                    key: const Key(
+                                      'deal-payment-account-name-field',
+                                    ),
+                                    controller: _paymentAccountNameController,
+                                    enabled: !submissionLocked,
+                                    textCapitalization:
+                                        TextCapitalization.words,
+                                    textInputAction: TextInputAction.next,
+                                    onChanged: (_) => _markDirty(),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Account name (optional)',
+                                      hintText: 'Name students should pay',
+                                    ),
+                                    validator:
+                                        viewModel.validatePaymentAccountName,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  key: const Key(
+                                    'deal-payment-account-handle-field',
+                                  ),
+                                  controller: _paymentAccountHandleController,
+                                  enabled: !submissionLocked,
+                                  textInputAction: TextInputAction.next,
+                                  onChanged: (_) => _markDirty(),
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        'Account number or handle (optional)',
+                                    hintText:
+                                        'Mobile number, bank account, or username',
+                                    prefixIcon: Icon(Icons.tag_outlined),
+                                  ),
+                                  validator:
+                                      viewModel.validatePaymentAccountHandle,
+                                ),
+                                const SizedBox(height: 16),
+                                TextFormField(
+                                  key: const Key(
+                                    'deal-payment-instructions-field',
+                                  ),
+                                  controller: _paymentInstructionsController,
+                                  enabled: !submissionLocked,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  maxLines: 2,
+                                  onChanged: (_) => _markDirty(),
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        'Payment instructions (optional)',
+                                    hintText:
+                                        'e.g. Send a screenshot after paying.',
+                                    alignLabelWithHint: true,
+                                  ),
+                                  validator:
+                                      viewModel.validatePaymentInstructions,
+                                ),
+                              ],
+                            ),
+                          ),
                           if (showReview) ...[
                             const SizedBox(height: 16),
                             RepaintBoundary(
@@ -601,6 +703,10 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
       unit: _unit,
       totalSlots: int.parse(_totalSlotsController.text.trim()),
       pickupLocation: _pickupLocationController.text,
+      paymentMethod: _paymentMethodController.text,
+      paymentAccountName: _paymentAccountNameController.text,
+      paymentAccountHandle: _paymentAccountHandleController.text,
+      paymentInstructions: _paymentInstructionsController.text,
       closesAt: _closesAt,
     );
 

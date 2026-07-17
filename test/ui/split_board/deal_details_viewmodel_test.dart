@@ -456,6 +456,35 @@ void main() {
     expect(viewModel.deal.status, DealStatus.readyForPickup);
     expect(viewModel.canMarkPurchased, isFalse);
     expect(viewModel.canMarkCollected, isTrue);
+    expect(
+      viewModel.pickupProgressLabel,
+      '1 of 2 picked up - 1 pickup remaining',
+    );
+  });
+
+  test('pickup progress completes when the last student collects', () async {
+    final repository = MockReservationRepository(
+      deal: hostedDeal(availableSlots: 1, totalSlots: 2),
+      currentUserId: 'host',
+    );
+    await repository.reserveSlotFor('ana');
+    await repository.markPurchased('d');
+    final viewModel = DealDetailsViewModel(
+      reservationRepository: repository,
+      deal: repository.deal,
+      currentUserId: 'host',
+    );
+    await pumpEventQueue();
+
+    expect(
+      viewModel.pickupProgressLabel,
+      '1 of 2 picked up - 1 pickup remaining',
+    );
+
+    await viewModel.setCollected('ana', collected: true);
+
+    expect(viewModel.deal.status, DealStatus.completed);
+    expect(viewModel.pickupProgressLabel, 'All 2 pickups are collected.');
   });
 
   test('a student sees no host controls', () async {
@@ -575,6 +604,53 @@ void main() {
     expect(viewModel.holdsSlot, isTrue);
     expect(viewModel.canCancel, isFalse);
   });
+
+  test('updates when another student changes the open deal', () async {
+    final repository = _LiveReservationRepository(
+      snapshot: DealDetailsSnapshot(
+        deal: hostedDeal(availableSlots: 1, totalSlots: 2),
+        participants: [
+          _participant(
+            'd',
+            'host',
+            isHost: true,
+            paidAt: DateTime(2026, 7, 16),
+          ),
+        ],
+      ),
+    );
+    final viewModel = DealDetailsViewModel(
+      reservationRepository: repository,
+      deal: repository.snapshot.deal,
+      currentUserId: 'host',
+    );
+    await pumpEventQueue();
+
+    expect(viewModel.canMarkPurchased, isFalse);
+
+    repository.emit(
+      DealDetailsSnapshot(
+        deal: hostedDeal(availableSlots: 0, totalSlots: 2, paidCount: 2),
+        participants: [
+          _participant(
+            'd',
+            'host',
+            isHost: true,
+            paidAt: DateTime(2026, 7, 16),
+          ),
+          _participant('d', 'ana', paidAt: DateTime(2026, 7, 16)),
+        ],
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(viewModel.deal.availableSlots, 0);
+    expect(viewModel.participants.map((participant) => participant.userId), [
+      'host',
+      'ana',
+    ]);
+    expect(viewModel.canMarkPurchased, isTrue);
+  });
 }
 
 DealDetailsViewModel _controlledViewModel(
@@ -649,7 +725,11 @@ class _ControllableReservationRepository implements ReservationRepository {
   Future<Deal> cancelDeal(String dealId) => _delegate.cancelDeal(dealId);
 }
 
-Deal hostedDeal({required int availableSlots, required int totalSlots}) {
+Deal hostedDeal({
+  required int availableSlots,
+  required int totalSlots,
+  int paidCount = 1,
+}) {
   return Deal(
     id: 'd',
     hubId: 'h',
@@ -662,7 +742,79 @@ Deal hostedDeal({required int availableSlots, required int totalSlots}) {
     availableSlots: availableSlots,
     totalSlots: totalSlots,
     pickupLocation: 'Lobby',
-    paidCount: 1,
+    paidCount: paidCount,
+  );
+}
+
+class _LiveReservationRepository
+    implements ReservationRepository, RealtimeReservationRepository {
+  _LiveReservationRepository({required this.snapshot});
+
+  DealDetailsSnapshot snapshot;
+  final _controller = StreamController<DealDetailsSnapshot>();
+
+  void emit(DealDetailsSnapshot value) {
+    snapshot = value;
+    _controller.add(value);
+  }
+
+  @override
+  Stream<DealDetailsSnapshot> watchDealDetails(Deal deal) async* {
+    yield snapshot;
+    yield* _controller.stream;
+  }
+
+  @override
+  Future<List<Reservation>> getParticipants(String dealId) async =>
+      snapshot.participants;
+
+  @override
+  Future<Deal> reserveSlot(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> cancelReservation(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> setPaid(String dealId, String userId, {required bool paid}) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> setCollected(
+    String dealId,
+    String userId, {
+    required bool collected,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> markPurchased(String dealId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Deal> cancelDeal(String dealId) {
+    throw UnimplementedError();
+  }
+}
+
+Reservation _participant(
+  String dealId,
+  String userId, {
+  bool isHost = false,
+  DateTime? paidAt,
+}) {
+  return Reservation(
+    dealId: dealId,
+    userId: userId,
+    isHost: isHost,
+    reservedAt: DateTime(2026, 7, 16),
+    paidAt: paidAt,
   );
 }
 

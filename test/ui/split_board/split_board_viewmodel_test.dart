@@ -22,7 +22,7 @@ void main() {
 
     expect(viewModel.isLoading, isTrue);
     expect(viewModel.hubName, 'Colon Street Hub');
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.isLoading, isFalse);
     expect(viewModel.deals, hasLength(2));
@@ -35,7 +35,7 @@ void main() {
       hubId: 'empty',
       hubName: 'Empty Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.deals, isEmpty);
     expect(viewModel.hasError, isFalse);
@@ -51,7 +51,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
     expect(repository.getDealsCalls, 1);
 
     await viewModel.refresh();
@@ -68,7 +68,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.hasError, isTrue);
     expect(viewModel.deals, isEmpty);
@@ -249,7 +249,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     viewModel.updateSearchQuery('rice');
 
@@ -283,7 +283,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     viewModel.updateCategoryFilter(DealCategory.grocery);
     viewModel.updateStatusFilter(DealStatus.full);
@@ -307,7 +307,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     expect(viewModel.filteredDeals.map((deal) => deal.id), ['a']);
 
@@ -343,7 +343,7 @@ void main() {
       hubId: 'colon',
       hubName: 'Colon Street Hub',
     );
-    await Future<void>.value();
+    await pumpEventQueue();
 
     viewModel.updateSortOption(DealSortOption.deadline);
 
@@ -400,7 +400,7 @@ void main() {
         hubId: 'colon',
         hubName: 'Colon Street Hub',
       );
-      await Future<void>.value();
+      await pumpEventQueue();
 
       viewModel.updateSortOption(DealSortOption.price);
 
@@ -450,6 +450,31 @@ void main() {
 
     expect(viewModel.filteredDeals.single.availableSlots, 3);
   });
+
+  test('updates when the hub deal stream emits a new posted deal', () async {
+    final repository = _StreamingDealRepository(
+      initialDeals: const [_StubDeal(id: 'rice', title: 'Rice Sack')],
+    );
+    addTearDown(repository.dispose);
+    final viewModel = SplitBoardViewModel(
+      dealRepository: repository,
+      hubId: 'colon',
+      hubName: 'Colon Street Hub',
+    );
+    addTearDown(viewModel.dispose);
+    await pumpEventQueue();
+
+    repository.emit(const [
+      _StubDeal(id: 'beans', title: 'Coffee Beans'),
+      _StubDeal(id: 'rice', title: 'Rice Sack'),
+    ]);
+    await pumpEventQueue();
+
+    expect(viewModel.deals.map((deal) => deal.title), [
+      'Coffee Beans',
+      'Rice Sack',
+    ]);
+  });
 }
 
 /// Every stub splits 4 ways, so totalPrice / 4 is the per-share price the
@@ -492,6 +517,11 @@ class _FakeDealRepository implements DealRepository {
   }
 
   @override
+  Stream<List<Deal>> watchDeals(String hubId) async* {
+    yield await getDeals(hubId);
+  }
+
+  @override
   Future<Deal> createDeal(DealDraft draft) {
     throw UnimplementedError();
   }
@@ -508,8 +538,33 @@ class _SequencedDealRepository implements DealRepository {
     return _responses[getDealsCalls++]();
   }
 
+  /// One read, then done — the default on [DealRepository], which `implements`
+  /// does not inherit. Deliberately not `async*`: the read must be issued when
+  /// the ViewModel subscribes, so these tests keep their response ordering.
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) =>
+      Stream.fromFuture(getDeals(hubId));
+
   @override
   Future<Deal> createDeal(DealDraft draft) {
     throw UnimplementedError();
   }
+}
+
+class _StreamingDealRepository extends _FakeDealRepository {
+  _StreamingDealRepository({required List<Deal> initialDeals})
+    : _controller = StreamController<List<Deal>>.broadcast(),
+      super({'colon': initialDeals});
+
+  final StreamController<List<Deal>> _controller;
+
+  @override
+  Stream<List<Deal>> watchDeals(String hubId) => _controller.stream;
+
+  void emit(List<Deal> deals) {
+    _dealsByHub['colon'] = deals;
+    _controller.add(deals);
+  }
+
+  Future<void> dispose() => _controller.close();
 }

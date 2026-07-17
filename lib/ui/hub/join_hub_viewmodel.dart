@@ -54,6 +54,7 @@ class JoinHubViewModel extends ChangeNotifier {
        _hubRepository = hubRepository,
        _locationService = locationService {
     _authSub = _authRepository.authStateChanges.listen(_onAuthChanged);
+    // Handles a null user too, which is what resets identity state on sign-out.
     _onAuthChanged(_authRepository.currentUser);
   }
 
@@ -61,6 +62,7 @@ class JoinHubViewModel extends ChangeNotifier {
   final HubRepository _hubRepository;
   final LocationService _locationService;
   late final StreamSubscription<AppUser?> _authSub;
+  StreamSubscription<HubDirectorySnapshot>? _hubSub;
 
   List<Hub> _hubs = [];
   String _searchQuery = '';
@@ -161,6 +163,9 @@ class JoinHubViewModel extends ChangeNotifier {
     _membershipGeneration += 1;
     _activeLoadGeneration = null;
 
+    // Signing out must not leave the previous student's directory on screen.
+    _hubSub?.cancel();
+    _hubSub = null;
     _hubs = const [];
     _joinedHubId = null;
     _pendingSwitchId = null;
@@ -175,7 +180,30 @@ class JoinHubViewModel extends ChangeNotifier {
     _isLoading = userId != null;
     notifyListeners();
 
-    if (userId != null) unawaited(_load(userId));
+    if (userId != null) _startHubUpdates(userId);
+  }
+
+  /// Realtime repositories push the directory; the rest are read once. Either
+  /// way the result lands through the same identity and location guards.
+  void _startHubUpdates(String userId) {
+    final realtimeRepository = _hubRepository is RealtimeHubRepository
+        ? _hubRepository as RealtimeHubRepository
+        : null;
+
+    if (realtimeRepository == null) {
+      unawaited(_load(userId));
+      return;
+    }
+
+    final identityGeneration = _identityGeneration;
+    _hubSub?.cancel();
+    _hubSub = realtimeRepository
+        .watchHubDirectory(userId)
+        .listen(
+          (snapshot) =>
+              unawaited(_setHubSnapshot(userId, identityGeneration, snapshot)),
+          onError: (_) => _setHubSnapshotError(userId, identityGeneration),
+        );
   }
 
   Future<void> _load(String userId) async {
@@ -239,6 +267,43 @@ class JoinHubViewModel extends ChangeNotifier {
     return _isCurrentIdentity(userId, identityGeneration) &&
         _loadGeneration == loadGeneration &&
         _activeLoadGeneration == loadGeneration;
+  }
+
+  /// A pushed directory, measured and committed through the same guards as
+  /// [_load] so a snapshot for a signed-out student can never land.
+  Future<void> _setHubSnapshot(
+    String userId,
+    int identityGeneration,
+    HubDirectorySnapshot snapshot,
+  ) async {
+    if (!_isCurrentIdentity(userId, identityGeneration)) return;
+
+    final locationGeneration = ++_locationGeneration;
+    final outcome = await _measureDistances(List<Hub>.of(snapshot.hubs));
+    if (!_isCurrentIdentity(userId, identityGeneration) ||
+        _locationGeneration != locationGeneration) {
+      return;
+    }
+
+    _hubs = outcome.hubs;
+    _joinedHubId = snapshot.joinedHubId;
+    _pendingSwitchId = null;
+    _directoryErrorMessage = null;
+    _locationFailureMessage = outcome.failureMessage;
+    if (outcome.disableNearbyFilter) _nearbyOnly = false;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  void _setHubSnapshotError(String userId, int identityGeneration) {
+    if (!_isCurrentIdentity(userId, identityGeneration)) return;
+
+    // Mirrors _load's catch rather than emptying the list: a dropped stream is
+    // a failure to read the directory, not proof that there are no hubs.
+    _directoryErrorMessage =
+        'Couldn’t load hubs. Check your connection and try again.';
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<_LocationOutcome> _measureDistances(List<Hub> hubs) async {
@@ -547,6 +612,7 @@ class JoinHubViewModel extends ChangeNotifier {
     _membershipGeneration += 1;
     _activeLoadGeneration = null;
     _authSub.cancel();
+    _hubSub?.cancel();
     super.dispose();
   }
 }

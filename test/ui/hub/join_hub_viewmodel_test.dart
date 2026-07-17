@@ -946,58 +946,46 @@ void main() {
   );
 
   test(
-    'auth transition during leave isolates state and busy finalizers by account',
+    'updates hub member counts from the realtime directory stream',
     () async {
-      final authRepository = _ControlledAuthRepository(initialUser: _userA);
-      final repository = _ControlledHubRepository(
-        hubs: _unsortedDirectory,
-        currentHubId: 'near',
-      )..blockLeaves();
+      final hubRepository = _LiveHubRepository(
+        snapshot: const HubDirectorySnapshot(
+          hubs: _unsortedDirectory,
+          joinedHubId: null,
+        ),
+      );
       final viewModel = JoinHubViewModel(
-        authRepository: authRepository,
-        hubRepository: repository,
+        authRepository: _SignedInAuthRepository(),
+        hubRepository: hubRepository,
         locationService: _FakeLocationService(
           result: const Coordinates(latitude: 10.2954, longitude: 123.8969),
         ),
       );
-      addTearDown(() async {
-        repository.releaseAllMembership();
-        await pumpEventQueue();
-        viewModel.dispose();
-        authRepository.dispose();
-      });
-
       await pumpEventQueue();
-      final userALeave = viewModel.leave();
 
-      repository.currentHubId = 'north';
-      authRepository.emit(_userB);
+      expect(
+        viewModel.filteredHubs
+            .firstWhere((hub) => hub.id == 'near')
+            .memberCount,
+        3,
+      );
+
+      hubRepository.emit(
+        HubDirectorySnapshot(
+          hubs: _unsortedDirectory
+              .map(
+                (hub) => hub.id == 'near'
+                    ? hub.copyWith(memberCount: hub.memberCount + 1)
+                    : hub,
+              )
+              .toList(),
+          joinedHubId: 'near',
+        ),
+      );
       await pumpEventQueue();
-      repository.blockLeaves();
-      final userBLeave = viewModel.leave();
 
-      expect(viewModel.joinedHubId, 'north');
-      expect(viewModel.isUpdatingMembership, isTrue);
-      expect(viewModel.isLeaving, isTrue);
-
-      repository.releaseLeave(0);
-      await userALeave;
-
-      expect(viewModel.joinedHubId, 'north');
-      expect(viewModel.isUpdatingMembership, isTrue);
-      expect(viewModel.isLeaving, isTrue);
-      expect(_memberCount(viewModel, 'near'), 3);
-      expect(_memberCount(viewModel, 'north'), 7);
-
-      repository.releaseLeave(1);
-      await userBLeave;
-
-      expect(repository.leftUserIds, ['user-a', 'user-b']);
-      expect(viewModel.joinedHubId, isNull);
-      expect(_memberCount(viewModel, 'near'), 3);
-      expect(_memberCount(viewModel, 'north'), 6);
-      expect(viewModel.isUpdatingMembership, isFalse);
-      expect(viewModel.isLeaving, isFalse);
+      expect(viewModel.joinedHubId, 'near');
+      expect(viewModel.joinedHub?.memberCount, 4);
     },
   );
 }
@@ -1301,6 +1289,11 @@ class _ControlledAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AppUser> updateDisplayName(String displayName) {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<AuthRegistrationResult> register({
     required String displayName,
     required String email,
@@ -1335,6 +1328,11 @@ class _SignedInAuthRepository implements AuthRepository {
     required String email,
     required String password,
   }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<AppUser> updateDisplayName(String displayName) {
     throw UnimplementedError();
   }
 
@@ -1383,6 +1381,41 @@ class _HubRepositoryWithDirectory implements HubRepository {
 
   @override
   Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
+
+class _LiveHubRepository implements HubRepository, RealtimeHubRepository {
+  _LiveHubRepository({required this.snapshot});
+
+  HubDirectorySnapshot snapshot;
+  final _controller = StreamController<HubDirectorySnapshot>();
+
+  void emit(HubDirectorySnapshot value) {
+    snapshot = value;
+    _controller.add(value);
+  }
+
+  @override
+  Stream<HubDirectorySnapshot> watchHubDirectory(String userId) async* {
+    yield snapshot;
+    yield* _controller.stream;
+  }
+
+  @override
+  Future<List<Hub>> getHubs() async => snapshot.hubs;
+
+  @override
+  Future<Hub> createHub(HubDraft draft) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => snapshot.joinedHubId;
 
   @override
   Future<void> joinHub({required String userId, required String hubId}) async {}

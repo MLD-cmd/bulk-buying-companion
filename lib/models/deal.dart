@@ -18,6 +18,10 @@ class Deal {
     required this.totalSlots,
     required this.pickupLocation,
     this.description,
+    this.paymentMethod,
+    this.paymentAccountName,
+    this.paymentAccountHandle,
+    this.paymentInstructions,
     this.closesAt,
     this.createdBy,
     this.hostName,
@@ -60,6 +64,10 @@ class Deal {
   final int availableSlots;
   final int totalSlots;
   final String pickupLocation;
+  final String? paymentMethod;
+  final String? paymentAccountName;
+  final String? paymentAccountHandle;
+  final String? paymentInstructions;
   final DateTime? closesAt;
 
   /// The host has bought the goods. Set by mark_purchased; never cleared.
@@ -88,6 +96,12 @@ class Deal {
       PhysicalShare.from(amount: amount, unit: unit, slots: totalSlots);
 
   double get pricePerShare => costSplit.pricePerShare;
+
+  bool get hasPaymentInfo =>
+      _hasText(paymentMethod) ||
+      _hasText(paymentAccountName) ||
+      _hasText(paymentAccountHandle) ||
+      _hasText(paymentInstructions);
 
   /// Every claimed slot is a student in the buy. The reserve/cancel RPCs move
   /// available_slots and the reservation rows together in one transaction, so
@@ -171,6 +185,10 @@ class Deal {
       availableSlots: availableSlots ?? this.availableSlots,
       totalSlots: totalSlots,
       pickupLocation: pickupLocation,
+      paymentMethod: paymentMethod,
+      paymentAccountName: paymentAccountName,
+      paymentAccountHandle: paymentAccountHandle,
+      paymentInstructions: paymentInstructions,
       closesAt: closesAt,
       purchasedAt: purchasedAt ?? this.purchasedAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
@@ -204,6 +222,10 @@ class DealDraft {
     required this.totalSlots,
     required this.pickupLocation,
     this.description,
+    this.paymentMethod,
+    this.paymentAccountName,
+    this.paymentAccountHandle,
+    this.paymentInstructions,
     this.closesAt,
   });
 
@@ -216,8 +238,14 @@ class DealDraft {
   final DealUnit unit;
   final int totalSlots;
   final String pickupLocation;
+  final String? paymentMethod;
+  final String? paymentAccountName;
+  final String? paymentAccountHandle;
+  final String? paymentInstructions;
   final DateTime? closesAt;
 }
+
+bool _hasText(String? value) => value?.trim().isNotEmpty == true;
 
 /// Peso amounts, grouped in thousands: 1200.0 -> 'P1,200', 95.5 -> 'P95.50'.
 /// Whole amounts drop the decimals, which is how prices are written on campus.

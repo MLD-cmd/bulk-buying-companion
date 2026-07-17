@@ -13,6 +13,8 @@ import 'package:bulk_buying_companion/ui/shared/app_icon_container.dart';
 import 'package:bulk_buying_companion/ui/shared/app_theme.dart';
 import 'package:bulk_buying_companion/ui/split_board/create_deal_screen.dart';
 import 'package:bulk_buying_companion/ui/split_board/widgets/deal_card.dart';
+import 'package:bulk_buying_companion/data/repositories/notification_repository.dart';
+import 'package:bulk_buying_companion/models/deal_notification.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -447,13 +449,38 @@ Future<JoinHubViewModel> _pumpCurrentHubScreen(
   });
 
   await tester.pumpWidget(
-    ChangeNotifierProvider.value(
-      value: viewModel,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<JoinHubViewModel>.value(value: viewModel),
+        // The app bar's notification bell reads these.
+        Provider<AuthRepository>.value(value: authRepository),
+        Provider<NotificationRepository>.value(
+          value: const _ResponsiveNotificationStub(),
+        ),
+      ],
       child: MaterialApp(theme: AppTheme.light(), home: const JoinHubScreen()),
     ),
   );
   await tester.pumpAndSettle();
   return viewModel;
+}
+
+class _ResponsiveNotificationStub implements NotificationRepository {
+  const _ResponsiveNotificationStub();
+
+  @override
+  Future<List<DealNotification>> getNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) async => const [];
+
+  @override
+  Stream<List<DealNotification>> watchNotifications({
+    required String hubId,
+    required String currentUserId,
+  }) async* {
+    yield const [];
+  }
 }
 
 class _ResponsiveLocationStub implements LocationService {

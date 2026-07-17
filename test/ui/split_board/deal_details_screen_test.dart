@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui' show Tristate;
 
 import 'package:bulk_buying_companion/data/repositories/reservation_repository.dart';
+import 'package:bulk_buying_companion/data/repositories/report_repository.dart';
 import 'package:bulk_buying_companion/models/deal.dart';
 import 'package:bulk_buying_companion/models/deal_unit.dart';
 import 'package:bulk_buying_companion/models/reservation.dart';
@@ -16,6 +17,7 @@ void main() {
     WidgetTester tester,
     Deal deal, {
     String currentUserId = 'visitor',
+    ReportRepository? reportRepository,
   }) async {
     // Tall enough that the whole scrollable body — including the reserve
     // button below the new participants list — renders onstage, so plain
@@ -27,16 +29,23 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ChangeNotifierProvider(
-          create: (_) => DealDetailsViewModel(
-            deal: deal,
-            currentUserId: currentUserId,
-            reservationRepository: MockReservationRepository(
+        home: MultiProvider(
+          providers: [
+            Provider<ReportRepository>.value(
+              value: reportRepository ?? _RecordingReportRepository(),
+            ),
+          ],
+          child: ChangeNotifierProvider(
+            create: (_) => DealDetailsViewModel(
               deal: deal,
               currentUserId: currentUserId,
+              reservationRepository: MockReservationRepository(
+                deal: deal,
+                currentUserId: currentUserId,
+              ),
             ),
+            child: const DealDetailsScreen(),
           ),
-          child: const DealDetailsScreen(),
         ),
       ),
     );
@@ -48,6 +57,7 @@ void main() {
     WidgetTester tester, {
     required MockReservationRepository repository,
     required String currentUserId,
+    ReportRepository? reportRepository,
   }) async {
     // Tall enough that the whole scrollable body renders onstage, so plain
     // find.text / find.byKey see it without a manual scroll.
@@ -58,13 +68,20 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ChangeNotifierProvider(
-          create: (_) => DealDetailsViewModel(
-            deal: repository.deal,
-            currentUserId: currentUserId,
-            reservationRepository: repository,
+        home: MultiProvider(
+          providers: [
+            Provider<ReportRepository>.value(
+              value: reportRepository ?? _RecordingReportRepository(),
+            ),
+          ],
+          child: ChangeNotifierProvider(
+            create: (_) => DealDetailsViewModel(
+              deal: repository.deal,
+              currentUserId: currentUserId,
+              reservationRepository: repository,
+            ),
+            child: const DealDetailsScreen(),
           ),
-          child: const DealDetailsScreen(),
         ),
       ),
     );
@@ -833,6 +850,7 @@ void main() {
 
     expect(find.text('1 of 2 paid — P100 still to collect'), findsOneWidget);
     expect(find.byKey(const Key('mark-paid-ana')), findsOneWidget);
+    expect(find.text('Mark paid'), findsOneWidget);
 
     // The host cannot unpay themselves: their own row is a bare chip, never a
     // button. This widget-level guard is the only thing enforcing that.
@@ -842,6 +860,48 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Everyone has paid.'), findsOneWidget);
+    expect(find.text('Unmark paid'), findsOneWidget);
+  });
+
+  testWidgets('the host sees manual payment instructions on the deal', (
+    tester,
+  ) async {
+    await pumpDetails(
+      tester,
+      const Deal(
+        id: 'payment-deal',
+        hubId: 'colon',
+        createdBy: 'host',
+        hostName: 'Marco Villanueva',
+        title: 'Cooking Oil 5L',
+        category: DealCategory.pantry,
+        totalPrice: 400,
+        amount: 4,
+        unit: DealUnit.litre,
+        availableSlots: 2,
+        totalSlots: 4,
+        pickupLocation: 'Lobby',
+        paymentMethod: 'GCash',
+        paymentAccountName: 'Marco Villanueva',
+        paymentAccountHandle: '09171234567',
+        paymentInstructions: 'Send a screenshot after paying.',
+        paidCount: 1,
+      ),
+      currentUserId: 'host',
+    );
+
+    expect(find.text('PAYMENT'), findsOneWidget);
+    expect(find.byKey(const Key('detail-payment-amount')), findsOneWidget);
+    expect(find.text('Amount owed: P100'), findsOneWidget);
+    expect(find.text('GCash'), findsOneWidget);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('detail-payment-account-name')))
+          .data,
+      'Marco Villanueva',
+    );
+    expect(find.text('09171234567'), findsOneWidget);
+    expect(find.text('Send a screenshot after paying.'), findsOneWidget);
   });
 
   testWidgets('a student sees the state but cannot change it', (tester) async {
@@ -953,17 +1013,92 @@ void main() {
       currentUserId: 'host',
     );
 
+    expect(find.text('PICKUP CHECKLIST'), findsOneWidget);
+    expect(find.text('1 of 2 picked up - 1 pickup remaining'), findsOneWidget);
     final anaCollected = find.byKey(const Key('mark-collected-ana'));
     expect(anaCollected, findsOneWidget);
     // The host's own share is collected the moment they buy; Ana's is not.
     expect(find.text('Mark collected'), findsOneWidget);
+    expect(find.textContaining('Collected '), findsOneWidget);
 
     await tester.tap(anaCollected);
     await tester.pumpAndSettle();
 
     expect(find.text('Mark collected'), findsNothing);
+    expect(find.text('Unmark collected'), findsOneWidget);
     expect(
-      find.descendant(of: anaCollected, matching: find.text('Collected')),
+      find.descendant(
+        of: anaCollected,
+        matching: find.text('Unmark collected'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('All 2 pickups are collected.'), findsOneWidget);
+    expect(find.textContaining('Collected '), findsNWidgets(2));
+  });
+
+  testWidgets('report action opens choices for deal or a visible user', (
+    tester,
+  ) async {
+    final reportRepository = _RecordingReportRepository();
+    final repository = MockReservationRepository(
+      deal: _reservableDeal,
+      currentUserId: 'user-2',
+    );
+    await repository.reserveSlotFor('user-2');
+    await repository.reserveSlotFor('ana');
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'user-2',
+      reportRepository: reportRepository,
+    );
+
+    expect(find.widgetWithText(TextButton, 'Report'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('detail-report-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Report deal or user'), findsOneWidget);
+    expect(find.text('Report this deal'), findsOneWidget);
+    await tester.tap(find.text('Report a user'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Marco Villanueva'), findsWidgets);
+    expect(find.text('Jayrald B. Tajanlangit'), findsWidgets);
+    expect(find.text('ana'), findsWidgets);
+
+    await tester.tap(find.byKey(const Key('report-user-ana')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Inappropriate content'));
+    await tester.enterText(
+      find.byKey(const Key('report-explanation-field')),
+      'This participant is harassing people in the pickup thread.',
+    );
+    await tester.tap(find.byKey(const Key('submit-report-button')));
+    await tester.pumpAndSettle();
+
+    expect(reportRepository.submittedDrafts, hasLength(1));
+    expect(
+      reportRepository.submittedDrafts.single.dealId,
+      'colon-rice-reservable',
+    );
+    expect(
+      reportRepository.submittedDrafts.single.targetType,
+      ReportTargetType.user,
+    );
+    expect(reportRepository.submittedDrafts.single.reportedUserId, 'ana');
+    expect(
+      reportRepository.submittedDrafts.single.reason,
+      ReportReason.inappropriate,
+    );
+    expect(
+      reportRepository.submittedDrafts.single.explanation,
+      'This participant is harassing people in the pickup thread.',
+    );
+    expect(
+      find.text('Report submitted. Thanks for helping keep this hub safe.'),
       findsOneWidget,
     );
   });
@@ -1148,3 +1283,17 @@ const _responsiveViewports = <Size>[
   Size(915, 412),
   Size(1200, 900),
 ];
+
+class _RecordingReportRepository implements ReportRepository {
+  final submittedDrafts = <ReportDraft>[];
+
+  @override
+  Future<void> submitReport(ReportDraft draft) async {
+    submittedDrafts.add(draft);
+  }
+
+  @override
+  Stream<List<Report>> watchReports() async* {
+    yield const [];
+  }
+}

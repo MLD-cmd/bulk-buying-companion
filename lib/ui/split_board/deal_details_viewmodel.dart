@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/reservation_repository.dart';
@@ -13,7 +15,17 @@ class DealDetailsViewModel extends ChangeNotifier {
     required this.currentUserId,
   }) : _reservationRepository = reservationRepository,
        _deal = deal {
-    _loadParticipants();
+    final realtimeRepository =
+        reservationRepository is RealtimeReservationRepository
+        ? reservationRepository as RealtimeReservationRepository
+        : null;
+    if (realtimeRepository == null) {
+      _loadParticipants();
+    } else {
+      _subscription = realtimeRepository
+          .watchDealDetails(deal)
+          .listen(_setSnapshot, onError: (_) => _setSnapshotError());
+    }
   }
 
   final ReservationRepository _reservationRepository;
@@ -29,6 +41,7 @@ class DealDetailsViewModel extends ChangeNotifier {
   int _mutationGeneration = 0;
   int _dealGeneration = 0;
   bool _isDisposed = false;
+  StreamSubscription<DealDetailsSnapshot>? _subscription;
 
   Deal get deal => _deal;
   List<Reservation> get participants => _participants;
@@ -90,6 +103,23 @@ class DealDetailsViewModel extends ChangeNotifier {
   /// student who settles up late, after pickup, still gets ticked off.
   bool get canMarkPaid => isHost && !isCancelled;
   bool get canMarkCollected => isHost && isPurchased && !isCancelled;
+
+  String? get pickupProgressLabel {
+    if (!isPurchased) return null;
+
+    final total = _deal.participantCount;
+    if (total == 0) return 'No pickups to track.';
+
+    final collected = _deal.collectedCount.clamp(0, total).toInt();
+    final remaining = total - collected;
+    if (remaining == 0) {
+      final noun = total == 1 ? 'pickup is' : 'pickups are';
+      return 'All $total $noun collected.';
+    }
+
+    final noun = remaining == 1 ? 'pickup' : 'pickups';
+    return '$collected of $total picked up - $remaining $noun remaining';
+  }
 
   /// What the host is still owed. The host's own slot counts as paid — they
   /// cannot pay themselves — so it is in the tally but not in the money.
@@ -228,8 +258,32 @@ class DealDetailsViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _isDisposed = true;
+    // Retire in-flight work: the generation guards compare against these.
     _participantGeneration++;
     _mutationGeneration++;
+    _dealGeneration++;
+    _subscription?.cancel();
     super.dispose();
+  }
+
+  void _setSnapshot(DealDetailsSnapshot snapshot) {
+    if (_isDisposed) return;
+    // Fresher than any in-flight one-shot load, which must not overwrite it.
+    _participantGeneration++;
+    _deal = snapshot.deal;
+    _participants = snapshot.participants;
+    _isLoadingParticipants = false;
+    _participantErrorMessage = null;
+    _notifyListeners();
+  }
+
+  void _setSnapshotError() {
+    if (_isDisposed) return;
+    _isLoadingParticipants = false;
+    // Without this the screen falls back to "Nobody has claimed a slot yet",
+    // which reads as an empty deal rather than a failure to read it.
+    _participantErrorMessage =
+        'Couldn’t load who is in this deal. Try again before reserving a slot.';
+    _notifyListeners();
   }
 }
