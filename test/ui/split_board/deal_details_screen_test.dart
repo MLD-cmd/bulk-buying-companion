@@ -1037,6 +1037,55 @@ void main() {
     expect(find.textContaining('Collected '), findsNWidgets(2));
   });
 
+  testWidgets('a report in flight locks its own choices', (tester) async {
+    final reportRepository = _BlockedReportRepository();
+    final repository = MockReservationRepository(
+      deal: _reservableDeal,
+      currentUserId: 'user-2',
+    );
+    await repository.reserveSlotFor('user-2');
+    await repository.reserveSlotFor('ana');
+
+    await pumpDetailsWith(
+      tester,
+      repository: repository,
+      currentUserId: 'user-2',
+      reportRepository: reportRepository,
+    );
+
+    await tester.tap(find.byKey(const Key('detail-report-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Inappropriate content'));
+    await tester.pumpAndSettle();
+
+    RadioListTile<ReportReason> reasonTile() =>
+        tester.widget<RadioListTile<ReportReason>>(
+          find.widgetWithText(RadioListTile<ReportReason>, 'Suspicious deal'),
+        );
+    expect(reasonTile().enabled, isTrue);
+
+    await tester.tap(find.byKey(const Key('submit-report-button')));
+    await tester.pump();
+
+    // Mid-submit: the choices behind the button must not still be changeable.
+    expect(reportRepository.submitCalls, 1);
+    expect(reasonTile().enabled, isFalse);
+    expect(
+      tester
+          .widget<RadioListTile<ReportTargetType>>(
+            find.widgetWithText(
+              RadioListTile<ReportTargetType>,
+              'Report this deal',
+            ),
+          )
+          .enabled,
+      isFalse,
+    );
+
+    reportRepository.gate.complete();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('report action opens choices for deal or a visible user', (
     tester,
   ) async {
@@ -1290,6 +1339,23 @@ class _RecordingReportRepository implements ReportRepository {
   @override
   Future<void> submitReport(ReportDraft draft) async {
     submittedDrafts.add(draft);
+  }
+
+  @override
+  Stream<List<Report>> watchReports() async* {
+    yield const [];
+  }
+}
+
+/// Holds submitReport open so the sheet can be inspected mid-submit.
+class _BlockedReportRepository implements ReportRepository {
+  final gate = Completer<void>();
+  int submitCalls = 0;
+
+  @override
+  Future<void> submitReport(ReportDraft draft) async {
+    submitCalls += 1;
+    await gate.future;
   }
 
   @override

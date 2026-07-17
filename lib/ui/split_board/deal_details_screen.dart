@@ -592,50 +592,76 @@ class _ReportSheetState extends State<_ReportSheet> {
                   'What are you reporting?',
                   style: theme.textTheme.titleSmall,
                 ),
-                RadioListTile<ReportTargetType>(
-                  contentPadding: EdgeInsets.zero,
-                  value: ReportTargetType.deal,
+                RadioGroup<ReportTargetType>(
                   groupValue: _targetType,
-                  onChanged: _isSubmitting ? null : _setTargetType,
-                  title: const Text('Report this deal'),
-                ),
-                if (canReportUser)
-                  RadioListTile<ReportTargetType>(
-                    contentPadding: EdgeInsets.zero,
-                    value: ReportTargetType.user,
-                    groupValue: _targetType,
-                    onChanged: _isSubmitting ? null : _setTargetType,
-                    title: const Text('Report a user'),
+                  onChanged: _setTargetType,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RadioListTile<ReportTargetType>(
+                        contentPadding: EdgeInsets.zero,
+                        value: ReportTargetType.deal,
+                        enabled: !_isSubmitting,
+                        title: const Text('Report this deal'),
+                      ),
+                      if (canReportUser)
+                        RadioListTile<ReportTargetType>(
+                          contentPadding: EdgeInsets.zero,
+                          value: ReportTargetType.user,
+                          enabled: !_isSubmitting,
+                          title: const Text('Report a user'),
+                        ),
+                    ],
                   ),
+                ),
                 if (_targetType == ReportTargetType.user && canReportUser) ...[
                   const SizedBox(height: 10),
                   Text(
                     'Who are you reporting?',
                     style: theme.textTheme.titleSmall,
                   ),
-                  for (final participant in reportableUsers)
-                    RadioListTile<String>(
-                      key: Key('report-user-${participant.userId}'),
-                      contentPadding: EdgeInsets.zero,
-                      value: participant.userId,
-                      groupValue: _reportedUserId,
-                      onChanged: _isSubmitting ? null : _setReportedUser,
-                      title: Text(participant.displayName),
-                      subtitle: participant.isHost
-                          ? const Text('Organiser')
-                          : null,
+                  RadioGroup<String>(
+                    groupValue: _reportedUserId,
+                    onChanged: _setReportedUser,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final participant in reportableUsers)
+                          RadioListTile<String>(
+                            key: Key('report-user-${participant.userId}'),
+                            contentPadding: EdgeInsets.zero,
+                            value: participant.userId,
+                            enabled: !_isSubmitting,
+                            title: Text(participant.displayName),
+                            subtitle: participant.isHost
+                                ? const Text('Organiser')
+                                : null,
+                          ),
+                      ],
                     ),
+                  ),
                 ],
                 const SizedBox(height: 10),
                 Text('Reason', style: theme.textTheme.titleSmall),
-                for (final item in ReportReason.values)
-                  RadioListTile<ReportReason>(
-                    contentPadding: EdgeInsets.zero,
-                    value: item,
-                    groupValue: _reason,
-                    onChanged: _isSubmitting ? null : _setReason,
-                    title: Text(item.label),
+                RadioGroup<ReportReason>(
+                  groupValue: _reason,
+                  onChanged: _setReason,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final item in ReportReason.values)
+                        RadioListTile<ReportReason>(
+                          contentPadding: EdgeInsets.zero,
+                          value: item,
+                          enabled: !_isSubmitting,
+                          title: Text(item.label),
+                        ),
+                    ],
                   ),
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   key: const Key('report-explanation-field'),
