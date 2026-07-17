@@ -224,15 +224,18 @@ class ProfileViewModel extends ChangeNotifier {
     final completed = <Deal>[];
 
     try {
+      // A host always holds their own slot, so only the rest are worth asking
+      // about — and they are asked about together, in one read where the
+      // repository can manage it.
+      final heldDealIds = await _dealIdsWithSlotFor(userId, [
+        for (final deal in deals)
+          if (deal.createdBy != userId) deal.id,
+      ]);
+      if (!_isCurrentIdentity(identityGeneration, userId)) return;
+
       for (final deal in deals) {
         final isHost = deal.createdBy == userId;
-        final participants = await _reservationRepository.getParticipants(
-          deal.id,
-        );
-        final holdsSlot = participants.any(
-          (participant) => participant.userId == userId,
-        );
-        if (!isHost && !holdsSlot) continue;
+        if (!isHost && !heldDealIds.contains(deal.id)) continue;
 
         if (deal.status == DealStatus.completed) {
           completed.add(deal);
@@ -253,6 +256,32 @@ class ProfileViewModel extends ChangeNotifier {
     _completedDeals = List.unmodifiable(completed);
     _dealHistoryErrorMessage = null;
     _notifyListeners();
+  }
+
+  /// Which of [dealIds] the student holds a slot in. One read when the
+  /// repository can batch; otherwise the per-deal walk it is limited to.
+  Future<Set<String>> _dealIdsWithSlotFor(
+    String userId,
+    List<String> dealIds,
+  ) async {
+    if (dealIds.isEmpty) return const <String>{};
+
+    final repository = _reservationRepository;
+    if (repository is BatchReservationRepository) {
+      return (repository as BatchReservationRepository).getDealIdsWithSlotFor(
+        userId,
+        dealIds,
+      );
+    }
+
+    final held = <String>{};
+    for (final dealId in dealIds) {
+      final participants = await repository.getParticipants(dealId);
+      if (participants.any((participant) => participant.userId == userId)) {
+        held.add(dealId);
+      }
+    }
+    return held;
   }
 
   void _setDealHistoryError(int identityGeneration, String userId) {

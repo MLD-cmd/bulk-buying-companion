@@ -325,6 +325,43 @@ void main() {
       authRepository.dispose();
     },
   );
+  test('a batch-capable repository is asked once, not once per deal', () async {
+    final reservations = _BatchReservationHistoryRepository({
+      'hosted-active': [_reservation('hosted-active', 'user-1', isHost: true)],
+      'joined-active': [
+        _reservation('joined-active', 'host-2', isHost: true),
+        _reservation('joined-active', 'user-1'),
+      ],
+      'someone-elses': [_reservation('someone-elses', 'host-4', isHost: true)],
+    });
+    final viewModel = ProfileViewModel(
+      authRepository: _ProfileAuthRepository(),
+      hubRepository: _SingleHubRepository(),
+      dealRepository: _DealHistoryRepository([
+        _deal(id: 'hosted-active', createdBy: 'user-1', title: 'Hosted Rice'),
+        _deal(id: 'joined-active', createdBy: 'host-2', title: 'Joined Water'),
+        _deal(id: 'someone-elses', createdBy: 'host-4', title: 'Not Mine'),
+      ]),
+      reservationRepository: reservations,
+    );
+
+    await pumpEventQueue();
+
+    // One read for the whole history, and never the per-deal walk.
+    expect(reservations.batchCalls, hasLength(1));
+    expect(reservations.perDealCalls, isEmpty);
+    // The host's own deal is not worth asking about -- they always hold it.
+    expect(reservations.batchCalls.single, isNot(contains('hosted-active')));
+    expect(
+      reservations.batchCalls.single,
+      containsAll(<String>['joined-active', 'someone-elses']),
+    );
+
+    expect(viewModel.hostedDeals.map((deal) => deal.title), ['Hosted Rice']);
+    expect(viewModel.joinedDeals.map((deal) => deal.title), ['Joined Water']);
+    expect(viewModel.completedDeals, isEmpty);
+  });
+
   test('loads hosted, joined, and completed deal history', () async {
     final viewModel = ProfileViewModel(
       authRepository: _ProfileAuthRepository(),
@@ -843,4 +880,33 @@ Reservation _reservation(
     reservedAt: DateTime(2026, 7, 16),
     collectedAt: collectedAt,
   );
+}
+
+/// Answers the history question in one read, and records how it was asked.
+class _BatchReservationHistoryRepository extends _ReservationHistoryRepository
+    implements BatchReservationRepository {
+  _BatchReservationHistoryRepository(super.participantsByDeal);
+
+  final perDealCalls = <String>[];
+  final batchCalls = <List<String>>[];
+
+  @override
+  Future<List<Reservation>> getParticipants(String dealId) {
+    perDealCalls.add(dealId);
+    return super.getParticipants(dealId);
+  }
+
+  @override
+  Future<Set<String>> getDealIdsWithSlotFor(
+    String userId,
+    List<String> dealIds,
+  ) async {
+    batchCalls.add(dealIds);
+    return {
+      for (final entry in participantsByDeal.entries)
+        if (dealIds.contains(entry.key) &&
+            entry.value.any((r) => r.userId == userId))
+          entry.key,
+    };
+  }
 }

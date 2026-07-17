@@ -118,6 +118,54 @@ void main() {
       );
     });
 
+    test('answers the deal-history question in a single read', () async {
+      final gateway = _StubGateway(
+        dealRow: _dealRow(availableSlots: 3),
+        participantRows: [
+          {'deal_id': 'deal-1', 'user_id': 'user-1'},
+          {'deal_id': 'deal-2', 'user_id': 'user-2'},
+          {'deal_id': 'deal-3', 'user_id': 'user-1'},
+        ],
+      );
+      final repository = SupabaseReservationRepository(gateway: gateway);
+
+      final held = await repository.getDealIdsWithSlotFor('user-1', [
+        'deal-1',
+        'deal-2',
+        'deal-3',
+      ]);
+
+      expect(held, {'deal-1', 'deal-3'});
+      expect(gateway.heldDealIdsCalls, 1);
+    });
+
+    test('asks nothing when there are no deals to ask about', () async {
+      final gateway = _StubGateway(dealRow: _dealRow(availableSlots: 3));
+      final repository = SupabaseReservationRepository(gateway: gateway);
+
+      expect(
+        await repository.getDealIdsWithSlotFor('user-1', const []),
+        isEmpty,
+      );
+      expect(gateway.heldDealIdsCalls, 0);
+    });
+
+    test(
+      'a failed history read is a ReservationFailure, not a raw error',
+      () async {
+        final repository = SupabaseReservationRepository(
+          gateway: _FailingGateway(
+            const PostgrestException(message: 'network down'),
+          ),
+        );
+
+        expect(
+          () => repository.getDealIdsWithSlotFor('user-1', const ['deal-1']),
+          throwsA(isA<ReservationFailure>()),
+        );
+      },
+    );
+
     test('lists the participants with the organiser first', () async {
       final repository = SupabaseReservationRepository(
         gateway: _StubGateway(
@@ -408,9 +456,23 @@ class _StubGateway implements SupabaseReservationGateway {
 
   final Map<String, dynamic> dealRow;
   final List<Map<String, dynamic>> participantRows;
+  int heldDealIdsCalls = 0;
 
   @override
   Future<Map<String, dynamic>> getDeal(String dealId) async => dealRow;
+
+  @override
+  Future<Set<String>> getHeldDealIds(
+    String userId,
+    List<String> dealIds,
+  ) async {
+    heldDealIdsCalls += 1;
+    return {
+      for (final row in participantRows)
+        if (row['user_id'] == userId && dealIds.contains(row['deal_id']))
+          row['deal_id'] as String,
+    };
+  }
 
   @override
   Future<Map<String, dynamic>> reserveSlot(String dealId) async => dealRow;
@@ -451,6 +513,12 @@ class _FailingGateway implements SupabaseReservationGateway {
 
   @override
   Future<Map<String, dynamic>> getDeal(String dealId) async => throw error;
+
+  @override
+  Future<Set<String>> getHeldDealIds(
+    String userId,
+    List<String> dealIds,
+  ) async => throw error;
 
   @override
   Future<Map<String, dynamic>> reserveSlot(String dealId) async => throw error;
