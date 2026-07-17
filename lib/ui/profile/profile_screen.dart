@@ -200,23 +200,31 @@ class _CurrentHubLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            const SizedBox.square(
-              key: Key('current-hub-progress'),
-              dimension: 20,
-              child: CircularProgressIndicator(strokeWidth: 2.4),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Loading your current hub…',
-                style: theme.textTheme.bodyMedium,
+      // The row already says it is loading; liveRegion is what makes a screen
+      // reader announce it when the state flips, rather than only on focus.
+      child: Semantics(
+        container: true,
+        liveRegion: true,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              const ExcludeSemantics(
+                child: SizedBox.square(
+                  key: Key('current-hub-progress'),
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Loading your current hub…',
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

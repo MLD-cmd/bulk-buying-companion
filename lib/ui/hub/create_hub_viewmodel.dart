@@ -29,6 +29,7 @@ class CreateHubViewModel extends ChangeNotifier {
   String? _errorMessage;
   Coordinates? _capturedLocation;
   bool _disposed = false;
+  bool _duplicateCheckUnavailable = false;
 
   List<Hub> get existingHubs => _existingHubs;
   bool get isLocating => _isLocating;
@@ -36,22 +37,36 @@ class CreateHubViewModel extends ChangeNotifier {
   String? get locationError => _locationError;
   String? get errorMessage => _errorMessage;
 
+  /// True when the hub directory could not be read, so [duplicateErrorFor] is
+  /// checking against nothing. Registration still works — the database rejects
+  /// a true duplicate — but the student should know the check is degraded.
+  bool get duplicateCheckUnavailable => _duplicateCheckUnavailable;
+
   /// Set when "Use my current location" succeeds, so the screen can push the
   /// values into its coordinate fields. The student can still edit them.
   Coordinates? get capturedLocation => _capturedLocation;
 
   Future<void> _loadExistingHubs() async {
     late final List<Hub> hubs;
+    var failed = false;
     try {
       hubs = await _hubRepository.getHubs();
     } catch (_) {
       // A failed directory load only weakens duplicate detection; it must not
       // block registration. The database's primary key is the real guard.
       hubs = const [];
+      failed = true;
     }
     if (_disposed) return;
     _existingHubs = hubs;
+    _duplicateCheckUnavailable = failed;
     notifyListeners();
+  }
+
+  /// Retries the directory load behind [duplicateCheckUnavailable].
+  Future<void> retryDuplicateCheck() async {
+    if (_disposed || _isSubmitting) return;
+    await _loadExistingHubs();
   }
 
   String? validateName(String? value) {

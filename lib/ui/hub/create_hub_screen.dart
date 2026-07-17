@@ -102,6 +102,19 @@ class _CreateHubScreenState extends State<CreateHubScreen> {
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
+                          if (viewModel.duplicateCheckUnavailable) ...[
+                            const SizedBox(height: 16),
+                            AppBanner.notice(
+                              key: const Key('hub-duplicate-check-warning'),
+                              message:
+                                  'Couldn’t load the hub list, so we can’t check '
+                                  'whether this hub is already registered. You '
+                                  'can still register it.',
+                              icon: Icons.cloud_off_outlined,
+                              actionLabel: 'Retry',
+                              onAction: viewModel.retryDuplicateCheck,
+                            ),
+                          ],
                           const SizedBox(height: 20),
                           AppFormSection(
                             title: 'Hub details',
@@ -141,7 +154,8 @@ class _CreateHubScreenState extends State<CreateHubScreen> {
                           AppFormSection(
                             title: 'Pickup area',
                             description:
-                                'Use your location or enter the saved coordinates.',
+                                'This is the spot students walk to. Tap the '
+                                'button below while you are standing there.',
                             icon: Icons.location_on_outlined,
                             children: [
                               _UseMyLocationButton(
@@ -158,6 +172,18 @@ class _CreateHubScreenState extends State<CreateHubScreen> {
                                 ),
                               ],
                               const SizedBox(height: 16),
+                              // The manual path asks for latitude and longitude,
+                              // which nobody knows off-hand for the dorm they
+                              // live in. Say where the numbers come from.
+                              Text(
+                                'Not there right now? Open Maps, press and hold '
+                                'the hub’s spot, and copy the two numbers it '
+                                'shows into the boxes below.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
                               _CoordinateFields(
                                 latitudeController: _latitudeController,
                                 longitudeController: _longitudeController,
@@ -465,7 +491,7 @@ class _CoordinateFields extends StatelessWidget {
               signed: true,
             ),
             decoration: const InputDecoration(
-              labelText: 'Latitude',
+              labelText: 'Latitude (first number)',
               hintText: '10.2954',
             ),
             validator: validateLatitude,
@@ -483,7 +509,7 @@ class _CoordinateFields extends StatelessWidget {
               signed: true,
             ),
             decoration: const InputDecoration(
-              labelText: 'Longitude',
+              labelText: 'Longitude (second number)',
               hintText: '123.8969',
             ),
             validator: validateLongitude,

@@ -69,7 +69,14 @@ class _SplitBoardScreenState extends State<SplitBoardScreen> {
         child: Consumer<SplitBoardViewModel>(
           builder: (context, viewModel, _) {
             if (viewModel.isLoading) {
-              return const Center(child: CircularProgressIndicator());
+              return Center(
+                child: Semantics(
+                  key: const Key('split-board-loading'),
+                  liveRegion: true,
+                  label: 'Loading deals',
+                  child: ExcludeSemantics(child: CircularProgressIndicator()),
+                ),
+              );
             }
 
             return RefreshIndicator(

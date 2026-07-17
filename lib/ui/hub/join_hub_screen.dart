@@ -101,7 +101,14 @@ class _JoinHubScreenState extends State<JoinHubScreen> {
         child: Consumer<JoinHubViewModel>(
           builder: (context, viewModel, _) {
             if (viewModel.isLoading) {
-              return const Center(child: CircularProgressIndicator());
+              return Center(
+                child: Semantics(
+                  key: const Key('join-hub-loading'),
+                  liveRegion: true,
+                  label: 'Loading hubs',
+                  child: ExcludeSemantics(child: CircularProgressIndicator()),
+                ),
+              );
             }
 
             if (viewModel.directoryErrorMessage != null &&
@@ -312,6 +319,21 @@ Future<void> _registerHub(BuildContext context) async {
   if (hub == null) return;
 
   await viewModel.refresh();
+
+  // The hub is registered either way — only the directory reload can fail. Say
+  // which of the two happened rather than reporting a list that may be stale.
+  if (viewModel.directoryErrorMessage != null) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          '${hub.name} was registered, but the hub list didn’t reload.',
+        ),
+        action: SnackBarAction(label: 'Retry', onPressed: viewModel.refresh),
+      ),
+    );
+    return;
+  }
+
   messenger.showSnackBar(
     SnackBar(content: Text('${hub.name} is now on the hub list.')),
   );

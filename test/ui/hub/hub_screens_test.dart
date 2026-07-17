@@ -709,6 +709,7 @@ void main() {
     await tester.enterText(find.byKey(const Key('hub-longitude-field')), '');
     final dormitoryType = find.byKey(const Key('hub-type-dormitory'));
     await tester.ensureVisible(dormitoryType);
+    await tester.pumpAndSettle();
     await tester.tap(dormitoryType);
     FocusScope.of(tester.element(find.byType(CreateHubScreen))).unfocus();
     await tester.pump();
@@ -1103,6 +1104,140 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a registered hub whose list reload fails is not called listed', (
+    tester,
+  ) async {
+    final repository = _ControlledHubRepository();
+    await _pumpJoinHubScreen(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('Register a hub'));
+    await tester.pumpAndSettle();
+    await _fillCreateHubForm(tester);
+
+    // The hub itself saves; only the directory reload behind it goes down.
+    repository.failDirectory = true;
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.createCalls, 1);
+    expect(
+      find.text(
+        'Sanciangko Apartments was registered, but the hub list didn’t reload.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Sanciangko Apartments is now on the hub list.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a registered hub that reloads cleanly is reported as listed', (
+    tester,
+  ) async {
+    final repository = _ControlledHubRepository();
+    await _pumpJoinHubScreen(tester, repository: repository);
+
+    await tester.tap(find.byTooltip('Register a hub'));
+    await tester.pumpAndSettle();
+    await _fillCreateHubForm(tester);
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Sanciangko Apartments is now on the hub list.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a failed hub directory says duplicate checking is degraded', (
+    tester,
+  ) async {
+    await _pumpCreateHubRoute(
+      tester,
+      repository: _FailingDirectoryCreateHubRepository(),
+      locationService: const _LocationStub(),
+    );
+
+    expect(
+      find.byKey(const Key('hub-duplicate-check-warning')),
+      findsOneWidget,
+    );
+    // Degraded, not blocked: the student can still register.
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const Key('hub-submit-button')))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('retrying a failed hub directory restores duplicate checking', (
+    tester,
+  ) async {
+    final repository = _FailingDirectoryCreateHubRepository(
+      hubs: [
+        const Hub(
+          id: 'existing',
+          name: 'Sanciangko Apartments',
+          type: HubType.dormitory,
+          memberCount: 4,
+          distanceLabel: 'Nearby',
+        ),
+      ],
+    );
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: const _LocationStub(),
+    );
+    expect(
+      find.byKey(const Key('hub-duplicate-check-warning')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('hub-duplicate-check-warning')), findsNothing);
+
+    // The recovered directory is actually used: this name is now a duplicate.
+    await _fillCreateHubForm(tester);
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('A hub named "Sanciangko Apartments" is already registered.'),
+      findsOneWidget,
+    );
+    expect(repository.createCalls, 0);
+  });
+
+  testWidgets('a hub directory that never loads still registers the hub', (
+    tester,
+  ) async {
+    final repository = _FailingDirectoryCreateHubRepository(failures: 99);
+    await _pumpCreateHubRoute(
+      tester,
+      repository: repository,
+      locationService: const _LocationStub(),
+    );
+
+    await _fillCreateHubForm(tester);
+    await tester.ensureVisible(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('hub-submit-button')));
+    await tester.pumpAndSettle();
+
+    expect(repository.createCalls, 1);
+  });
 }
 
 class _LocationStub implements LocationService {
@@ -1225,6 +1360,41 @@ class _CreateHubRepository implements HubRepository {
     createCalls += 1;
     final error = failure;
     if (error != null) throw error;
+    return _hubFromDraft(draft);
+  }
+
+  @override
+  Future<String?> getCurrentHubId(String userId) async => null;
+
+  @override
+  Future<void> joinHub({required String userId, required String hubId}) async {}
+
+  @override
+  Future<void> leaveHub({required String userId}) async {}
+}
+
+/// Fails the directory read the first [failures] times, then serves [hubs].
+class _FailingDirectoryCreateHubRepository implements HubRepository {
+  _FailingDirectoryCreateHubRepository({
+    this.failures = 1,
+    this.hubs = const [],
+  });
+
+  final int failures;
+  final List<Hub> hubs;
+  int getHubsCalls = 0;
+  int createCalls = 0;
+
+  @override
+  Future<List<Hub>> getHubs() async {
+    getHubsCalls += 1;
+    if (getHubsCalls <= failures) throw StateError('offline');
+    return hubs;
+  }
+
+  @override
+  Future<Hub> createHub(HubDraft draft) async {
+    createCalls += 1;
     return _hubFromDraft(draft);
   }
 
@@ -1381,8 +1551,22 @@ Future<JoinHubViewModel> _pumpJoinHubScreen(
   });
 
   await tester.pumpWidget(
-    ChangeNotifierProvider.value(
-      value: viewModel,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<JoinHubViewModel>.value(value: viewModel),
+        // The Register-a-hub route builds its own CreateHubViewModel from these.
+        Provider<HubRepository>.value(value: repository),
+        Provider<LocationService>.value(
+          value:
+              locationService ??
+              _ControlledLocationService(
+                result: const Coordinates(
+                  latitude: 10.2954,
+                  longitude: 123.8969,
+                ),
+              ),
+        ),
+      ],
       child: MaterialApp(theme: AppTheme.light(), home: const JoinHubScreen()),
     ),
   );
@@ -1484,6 +1668,7 @@ class _ControlledHubRepository implements HubRepository {
   bool failDirectory = false;
   bool failJoin = false;
   bool failLeave = false;
+  int createCalls = 0;
   Completer<void>? _joinGate;
   Completer<void>? _leaveGate;
   final List<String> joinedHubIds = [];
@@ -1531,7 +1716,10 @@ class _ControlledHubRepository implements HubRepository {
   }
 
   @override
-  Future<Hub> createHub(HubDraft draft) => throw UnimplementedError();
+  Future<Hub> createHub(HubDraft draft) async {
+    createCalls += 1;
+    return _hubFromDraft(draft);
+  }
 }
 
 class _ControlledLocationService implements LocationService {
