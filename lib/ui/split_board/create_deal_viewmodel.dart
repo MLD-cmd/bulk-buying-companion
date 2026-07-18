@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 
 import '../../data/repositories/deal_repository.dart';
+import '../../data/services/receipt_scanner.dart';
 import '../../models/cost_split.dart';
 import '../../models/deal.dart';
 import '../../models/deal_unit.dart';
 import '../../models/physical_share.dart';
+import '../../models/receipt_extraction.dart';
 
 /// A split with one share is not a split, and past a certain point the shares
 /// get too small to be worth collecting. Bounds the slot count both ways.
@@ -12,17 +14,63 @@ const int kMinDealSlots = 2;
 const int kMaxDealSlots = 50;
 
 class CreateDealViewModel extends ChangeNotifier {
-  CreateDealViewModel({required DealRepository dealRepository})
-    : _dealRepository = dealRepository;
+  CreateDealViewModel({
+    required DealRepository dealRepository,
+    ReceiptScanner? receiptScanner,
+  }) : _dealRepository = dealRepository,
+       _receiptScanner = receiptScanner;
 
   final DealRepository _dealRepository;
 
+  /// Optional: without it the "Scan receipt" affordance is simply absent, and
+  /// the form works exactly as it did before. Kept nullable so tests and any
+  /// build without the scanner wired in still construct the view model.
+  final ReceiptScanner? _receiptScanner;
+
   bool _isSubmitting = false;
   String? _errorMessage;
+  bool _isScanning = false;
+  String? _scanErrorMessage;
   bool _disposed = false;
 
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
+
+  /// Whether to offer receipt scanning at all — true only when a scanner was
+  /// wired in.
+  bool get scanningEnabled => _receiptScanner != null;
+  bool get isScanning => _isScanning;
+  String? get scanErrorMessage => _scanErrorMessage;
+
+  /// Scans a receipt and returns what it could read, for the screen to pre-fill
+  /// the form with. Returns null when the student backs out of the picker or
+  /// when the scan fails — a failure sets [scanErrorMessage] rather than
+  /// throwing, so the screen never has to catch anything.
+  Future<ReceiptExtraction?> scanReceipt(ReceiptImageSource source) async {
+    final scanner = _receiptScanner;
+    if (_disposed || scanner == null || _isScanning) return null;
+
+    _isScanning = true;
+    _scanErrorMessage = null;
+    notifyListeners();
+
+    try {
+      return await scanner.scan(source);
+    } on ReceiptScanFailure catch (failure) {
+      if (!_disposed) _scanErrorMessage = failure.message;
+      return null;
+    } catch (_) {
+      if (!_disposed) {
+        _scanErrorMessage = 'Could not scan the receipt. Please try again.';
+      }
+      return null;
+    } finally {
+      if (!_disposed) {
+        _isScanning = false;
+        notifyListeners();
+      }
+    }
+  }
 
   String? validateTitle(String? value) {
     final title = (value ?? '').trim();

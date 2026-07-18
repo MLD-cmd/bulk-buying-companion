@@ -172,12 +172,10 @@ class PostgrestSupabaseRecommendationGateway
     // which Postgres requires UPDATE privilege for even when no conflict ever
     // fires -- and this table's grants deliberately have no UPDATE, since a
     // dismissal is written once and never edited.
-    await _client
-        .from('dismissed_recommendations')
-        .upsert({
-          'user_id': userId,
-          'deal_id': dealId,
-        }, ignoreDuplicates: true);
+    await _client.from('dismissed_recommendations').upsert({
+      'user_id': userId,
+      'deal_id': dealId,
+    }, ignoreDuplicates: true);
   }
 }
 
@@ -260,7 +258,8 @@ class SupabaseRecommendationRepository implements RecommendationRepository {
       return 'You do not have permission to update $subject.';
     }
     return switch (operation) {
-      _Operation.preferences => 'Could not update your preferences. Please try again.',
+      _Operation.preferences =>
+        'Could not update your preferences. Please try again.',
       _Operation.dismissal => "Couldn't dismiss that deal. Please try again.",
     };
   }

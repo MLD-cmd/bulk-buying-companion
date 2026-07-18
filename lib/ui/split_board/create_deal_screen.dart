@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/repositories/deal_repository.dart';
+import '../../data/services/receipt_scanner.dart';
 import '../../models/cost_split.dart';
 import '../../models/deal.dart';
 import '../../models/deal_unit.dart';
 import '../../models/physical_share.dart';
+import '../../models/receipt_extraction.dart';
 import '../shared/app_banner.dart';
 import '../shared/app_form_section.dart';
 import '../shared/task_help_sheet.dart';
@@ -59,8 +61,12 @@ class CreateDealScreen extends StatefulWidget {
   static Route<Deal> route(String hubId, String hubName) {
     return MaterialPageRoute<Deal>(
       builder: (context) => ChangeNotifierProvider(
-        create: (context) =>
-            CreateDealViewModel(dealRepository: context.read<DealRepository>()),
+        create: (context) => CreateDealViewModel(
+          dealRepository: context.read<DealRepository>(),
+          // Optional: a build without a scanner wired in (as the widget tests
+          // are) simply shows no "Scan receipt" button.
+          receiptScanner: context.read<ReceiptScanner?>(),
+        ),
         child: CreateDealScreen(hubId: hubId, hubName: hubName),
       ),
     );
@@ -190,6 +196,23 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
                             ),
                           ),
                           const SizedBox(height: 20),
+                          if (viewModel.scanningEnabled) ...[
+                            _ScanReceiptButton(
+                              busy: viewModel.isScanning,
+                              onPressed:
+                                  submissionLocked || viewModel.isScanning
+                                  ? null
+                                  : () => _scanReceipt(viewModel),
+                            ),
+                            if (viewModel.scanErrorMessage != null) ...[
+                              const SizedBox(height: 12),
+                              AppBanner.error(
+                                key: const Key('deal-scan-error'),
+                                message: viewModel.scanErrorMessage!,
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                          ],
                           RepaintBoundary(
                             key: const Key('deal-product-repaint-boundary'),
                             child: AppFormSection(
@@ -570,6 +593,107 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
     });
   }
 
+  Future<void> _scanReceipt(CreateDealViewModel viewModel) async {
+    if (!mounted ||
+        _submissionFlowActive ||
+        _discardDialogOpen ||
+        _helpOpen ||
+        viewModel.isScanning ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    final source = await _pickImageSource();
+    if (source == null || !mounted) return;
+
+    final extraction = await viewModel.scanReceipt(source);
+    if (!mounted) return;
+
+    // The view model reports a real failure through scanErrorMessage, shown as
+    // a banner. A null with no message is the student backing out of the
+    // picker — nothing to say about that.
+    if (extraction == null) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    if (extraction.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Couldn't read the details from that receipt. Enter them by hand.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    _applyExtraction(extraction);
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Scanned — check the details before publishing.'),
+      ),
+    );
+  }
+
+  /// Writes each field the scan actually found, leaving the rest untouched, so a
+  /// partial read fills what it can without wiping what the student already
+  /// typed. Everything stays editable — this is a head start, not an answer.
+  void _applyExtraction(ReceiptExtraction extraction) {
+    if (!mounted) return;
+    setState(() {
+      if (extraction.productName case final name?) {
+        _titleController.text = name;
+      }
+      if (extraction.totalPrice case final price?) {
+        _totalPriceController.text = _formatScanNumber(price);
+      }
+      if (extraction.amount case final amount?) {
+        _amountController.text = _formatScanNumber(amount);
+      }
+      if (extraction.unit case final unit?) {
+        _unit = unit;
+      }
+      _isDirty = true;
+    });
+  }
+
+  /// 900.0 -> '900', 12.5 -> '12.5': the fields hold plain typed numbers, so a
+  /// scanned value should read the same as one keyed in by hand.
+  String _formatScanNumber(double value) {
+    return value == value.roundToDouble()
+        ? value.round().toString()
+        : value.toString();
+  }
+
+  Future<ReceiptImageSource?> _pickImageSource() {
+    return showModalBottomSheet<ReceiptImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const Key('scan-source-camera'),
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ReceiptImageSource.camera),
+            ),
+            ListTile(
+              key: const Key('scan-source-gallery'),
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from photos'),
+              onTap: () =>
+                  Navigator.of(sheetContext).pop(ReceiptImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _clearDeadline() {
     if (!mounted ||
         _submissionFlowActive ||
@@ -786,6 +910,69 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
         );
       }
     }
+  }
+}
+
+class _ScanReceiptButton extends StatelessWidget {
+  const _ScanReceiptButton({required this.busy, required this.onPressed});
+
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.document_scanner_outlined,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Scan a receipt to fill this in',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Reads the product, price, and quantity off a photo. You can edit '
+              'everything before publishing.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonalIcon(
+              key: const Key('deal-scan-button'),
+              onPressed: onPressed,
+              icon: busy
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                    )
+                  : const Icon(Icons.photo_camera_outlined),
+              label: Text(busy ? 'Scanning…' : 'Scan receipt'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

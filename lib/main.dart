@@ -13,6 +13,7 @@ import 'data/repositories/reservation_repository.dart';
 import 'data/repositories/report_repository.dart';
 import 'data/repositories/supabase_auth_repository.dart';
 import 'data/services/location_service.dart';
+import 'data/services/receipt_scanner.dart';
 import 'models/app_user.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/hub/join_hub_screen.dart';
@@ -76,6 +77,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     this.recommendationRepository,
     this.notificationInvalidationSource,
     this.locationService,
+    this.receiptScanner,
   });
 
   final AuthRepository? authRepository;
@@ -86,6 +88,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
   final RecommendationRepository? recommendationRepository;
   final NotificationInvalidationSource? notificationInvalidationSource;
   final LocationService? locationService;
+  final ReceiptScanner? receiptScanner;
 
   @override
   Widget build(BuildContext context) {
@@ -131,6 +134,9 @@ class BulkBuyingCompanionApp extends StatelessWidget {
         ),
         Provider<LocationService>(
           create: (_) => locationService ?? const GeolocatorLocationService(),
+        ),
+        Provider<ReceiptScanner>(
+          create: (_) => receiptScanner ?? MlKitReceiptScanner(),
         ),
         ChangeNotifierProvider<JoinHubViewModel>(
           create: (context) => JoinHubViewModel(
