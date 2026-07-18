@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/deal_repository.dart';
 import '../../data/repositories/hub_repository.dart';
+import '../../data/repositories/recommendation_repository.dart';
 import '../../data/repositories/reservation_repository.dart';
 import '../../models/app_user.dart';
 import '../../models/deal.dart';
@@ -16,10 +17,12 @@ class ProfileViewModel extends ChangeNotifier {
     required HubRepository hubRepository,
     required DealRepository dealRepository,
     required ReservationRepository reservationRepository,
+    RecommendationRepository? recommendationRepository,
   }) : _authRepository = authRepository,
        _hubRepository = hubRepository,
        _dealRepository = dealRepository,
-       _reservationRepository = reservationRepository {
+       _reservationRepository = reservationRepository,
+       _recommendationRepository = recommendationRepository {
     _user = _authRepository.currentUser;
     _activeUid = _user?.uid;
     _load();
@@ -33,19 +36,27 @@ class ProfileViewModel extends ChangeNotifier {
   final DealRepository _dealRepository;
   final ReservationRepository _reservationRepository;
 
+  /// Optional: without it the preferred-categories editor is simply absent.
+  /// Kept nullable so the profile still works in tests and any build that has
+  /// not wired personalisation.
+  final RecommendationRepository? _recommendationRepository;
+
   AppUser? _user;
   Hub? _currentHub;
   List<Deal> _hostedDeals = const [];
   List<Deal> _joinedDeals = const [];
   List<Deal> _completedDeals = const [];
+  Set<DealCategory> _preferredCategories = const {};
   bool _isLoading = true;
   bool _isSigningOut = false;
   bool _isSavingProfile = false;
+  bool _isSavingPreferences = false;
   // Kept apart rather than pooled into one message: each belongs to a different
   // action with a different retry, and one failing must not blank the others.
   String? _loadErrorMessage;
   String? _signOutErrorMessage;
   String? _saveErrorMessage;
+  String? _preferencesErrorMessage;
   String? _dealHistoryErrorMessage;
   int _loadGeneration = 0;
   int _identityGeneration = 0;
@@ -60,13 +71,58 @@ class ProfileViewModel extends ChangeNotifier {
   List<Deal> get hostedDeals => _hostedDeals;
   List<Deal> get joinedDeals => _joinedDeals;
   List<Deal> get completedDeals => _completedDeals;
+  Set<DealCategory> get preferredCategories => _preferredCategories;
+
+  /// Whether the preferred-categories editor should be offered at all — true
+  /// only when a recommendation repository was wired in.
+  bool get preferencesEnabled => _recommendationRepository != null;
   bool get isLoading => _isLoading;
   bool get isSigningOut => _isSigningOut;
   bool get isSavingProfile => _isSavingProfile;
+  bool get isSavingPreferences => _isSavingPreferences;
   String? get loadErrorMessage => _loadErrorMessage;
   String? get signOutErrorMessage => _signOutErrorMessage;
   String? get saveErrorMessage => _saveErrorMessage;
+  String? get preferencesErrorMessage => _preferencesErrorMessage;
   String? get dealHistoryErrorMessage => _dealHistoryErrorMessage;
+
+  /// Saves the student's preferred categories. Returns whether the write stuck,
+  /// so the editor can close on success and stay open, showing the error, on
+  /// failure. The local set is only advanced once the write succeeds.
+  Future<bool> savePreferredCategories(Set<DealCategory> categories) async {
+    final repository = _recommendationRepository;
+    final user = _user;
+    if (_isDisposed ||
+        repository == null ||
+        user == null ||
+        _isSavingPreferences) {
+      return false;
+    }
+
+    final identityGeneration = _identityGeneration;
+    final uid = _activeUid;
+    _isSavingPreferences = true;
+    _preferencesErrorMessage = null;
+    _notifyListeners();
+
+    try {
+      await repository.setPreferredCategories(user.uid, categories);
+      if (!_isCurrentIdentity(identityGeneration, uid)) return false;
+      _preferredCategories = Set.unmodifiable(categories);
+      return true;
+    } catch (_) {
+      if (_isCurrentIdentity(identityGeneration, uid)) {
+        _preferencesErrorMessage =
+            'Could not save your preferences. Please try again.';
+      }
+      return false;
+    } finally {
+      if (_isCurrentIdentity(identityGeneration, uid)) {
+        _isSavingPreferences = false;
+        _notifyListeners();
+      }
+    }
+  }
 
   Future<bool> saveDisplayName(String displayName) async {
     if (_isDisposed || _isSavingProfile) return false;
@@ -173,6 +229,12 @@ class ProfileViewModel extends ChangeNotifier {
       if (!_canCommitLoad(generation, identityGeneration, uid)) return;
       _currentHub = loadedHub;
       _loadErrorMessage = null;
+      if (user != null) {
+        _loadPreferredCategories(
+          userId: user.uid,
+          identityGeneration: identityGeneration,
+        );
+      }
       if (loadedHubId != null && user != null) {
         _startDealHistoryUpdates(
           hubId: loadedHubId,
@@ -189,6 +251,23 @@ class ProfileViewModel extends ChangeNotifier {
         _isLoading = false;
         _notifyListeners();
       }
+    }
+  }
+
+  Future<void> _loadPreferredCategories({
+    required String userId,
+    required int identityGeneration,
+  }) async {
+    final repository = _recommendationRepository;
+    if (repository == null) return;
+    try {
+      final categories = await repository.getPreferredCategories(userId);
+      if (!_isCurrentIdentity(identityGeneration, userId)) return;
+      _preferredCategories = Set.unmodifiable(categories);
+      _notifyListeners();
+    } catch (_) {
+      // Non-fatal: a failed read just opens the editor with nothing
+      // pre-selected, which the student can correct by saving.
     }
   }
 
@@ -314,13 +393,16 @@ class ProfileViewModel extends ChangeNotifier {
     _hostedDeals = const [];
     _joinedDeals = const [];
     _completedDeals = const [];
+    _preferredCategories = const {};
     _loadErrorMessage = null;
     _signOutErrorMessage = null;
     _saveErrorMessage = null;
+    _preferencesErrorMessage = null;
     _dealHistoryErrorMessage = null;
     _isLoading = false;
     _isSigningOut = false;
     _isSavingProfile = false;
+    _isSavingPreferences = false;
     _load();
   }
 

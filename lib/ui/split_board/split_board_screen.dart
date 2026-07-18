@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/deal_repository.dart';
+import '../../data/repositories/recommendation_repository.dart';
+import '../../data/repositories/reservation_repository.dart';
 import '../../models/deal.dart';
 import '../shared/app_banner.dart';
 import '../shared/app_icon_container.dart';
 import '../shared/app_message_state.dart';
 import 'create_deal_screen.dart';
 import 'deal_details_screen.dart';
+import 'recommendations_viewmodel.dart';
 import 'split_board_viewmodel.dart';
 import 'widgets/deal_card.dart';
+import 'widgets/recommended_deals_section.dart';
 
 class SplitBoardScreen extends StatefulWidget {
   const SplitBoardScreen({super.key, required this.hubId});
@@ -18,12 +23,43 @@ class SplitBoardScreen extends StatefulWidget {
 
   static Route<void> route(String hubId, String hubName) {
     return MaterialPageRoute(
-      builder: (context) => ChangeNotifierProvider(
-        create: (context) => SplitBoardViewModel(
-          dealRepository: context.read<DealRepository>(),
-          hubId: hubId,
-          hubName: hubName,
-        ),
+      builder: (context) => MultiProvider(
+        providers: [
+          ChangeNotifierProvider(
+            create: (context) => SplitBoardViewModel(
+              dealRepository: context.read<DealRepository>(),
+              hubId: hubId,
+              hubName: hubName,
+            ),
+          ),
+          // Recommendations need a signed-in student and the personalisation
+          // repository. The strip is optional everywhere it is read, so a build
+          // without either simply shows no recommendations rather than failing.
+          ChangeNotifierProvider<RecommendationsViewModel?>(
+            create: (context) {
+              // Every dependency is read as optional: a build that has not
+              // wired auth, reservations, or personalisation — as some widget
+              // tests do not — shows no recommendations rather than throwing.
+              final userId = context.read<AuthRepository?>()?.currentUser?.uid;
+              final reservationRepository = context
+                  .read<ReservationRepository?>();
+              final recommendationRepository = context
+                  .read<RecommendationRepository?>();
+              if (userId == null ||
+                  reservationRepository == null ||
+                  recommendationRepository == null) {
+                return null;
+              }
+              return RecommendationsViewModel(
+                dealRepository: context.read<DealRepository>(),
+                reservationRepository: reservationRepository,
+                recommendationRepository: recommendationRepository,
+                userId: userId,
+                hubId: hubId,
+              );
+            },
+          ),
+        ],
         child: SplitBoardScreen(hubId: hubId),
       ),
     );
@@ -166,6 +202,12 @@ class _DealList extends StatelessWidget {
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 12)),
         ],
+        SliverToBoxAdapter(
+          child: _RecommendationsStrip(
+            splitBoardViewModel: viewModel,
+            scrollController: scrollController,
+          ),
+        ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
           sliver: SliverToBoxAdapter(
@@ -192,33 +234,8 @@ class _DealList extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 10),
                     child: InkWell(
                       key: Key('deal-card-${deal.id}'),
-                      onTap: () async {
-                        final preservedOffset = scrollController.hasClients
-                            ? scrollController.offset
-                            : null;
-                        final updated = await Navigator.of(
-                          context,
-                        ).push(DealDetailsScreen.route(deal));
-                        if (!context.mounted) return;
-                        if (updated != null && !identical(updated, deal)) {
-                          viewModel.replaceDeal(updated);
-                        }
-                        if (preservedOffset != null) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (!scrollController.hasClients) return;
-                              scrollController.jumpTo(
-                                preservedOffset
-                                    .clamp(
-                                      scrollController.position.minScrollExtent,
-                                      scrollController.position.maxScrollExtent,
-                                    )
-                                    .toDouble(),
-                              );
-                            });
-                          });
-                        }
-                      },
+                      onTap: () =>
+                          _openDeal(context, deal, viewModel, scrollController),
                       borderRadius: BorderRadius.circular(16),
                       child: DealCard(deal: deal),
                     ),
@@ -228,6 +245,213 @@ class _DealList extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Opens a deal's details and, if it came back changed, swaps the new copy into
+/// the board. Shared by the deal list and the recommendations strip so both
+/// keep the board in step after a slot is claimed or released, and both restore
+/// the scroll position they were at.
+Future<void> _openDeal(
+  BuildContext context,
+  Deal deal,
+  SplitBoardViewModel viewModel,
+  ScrollController scrollController,
+) async {
+  final preservedOffset = scrollController.hasClients
+      ? scrollController.offset
+      : null;
+  final updated = await Navigator.of(
+    context,
+  ).push(DealDetailsScreen.route(deal));
+  if (!context.mounted) return;
+  if (updated != null && !identical(updated, deal)) {
+    viewModel.replaceDeal(updated);
+  }
+  if (preservedOffset != null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!scrollController.hasClients) return;
+        scrollController.jumpTo(
+          preservedOffset
+              .clamp(
+                scrollController.position.minScrollExtent,
+                scrollController.position.maxScrollExtent,
+              )
+              .toDouble(),
+        );
+      });
+    });
+  }
+}
+
+/// The board's slot for [RecommendedDealsSection]. Reads the recommendations
+/// ViewModel as nullable so a Split Board built without one — as the widget
+/// tests do — simply renders nothing here.
+///
+/// It also owns the three states a bare [RecommendedDealsSection] cannot tell
+/// apart on its own, because only the ViewModel knows them: still computing,
+/// nothing to show because no categories are set, and nothing to show because
+/// no open deal matches.
+class _RecommendationsStrip extends StatelessWidget {
+  const _RecommendationsStrip({
+    required this.splitBoardViewModel,
+    required this.scrollController,
+  });
+
+  final SplitBoardViewModel splitBoardViewModel;
+  final ScrollController scrollController;
+
+  static const _padding = EdgeInsets.fromLTRB(20, 8, 20, 4);
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<RecommendationsViewModel?>();
+    if (viewModel == null) return const SizedBox.shrink();
+
+    if (viewModel.recommendations.isNotEmpty) {
+      return Padding(
+        padding: _padding,
+        child: _BoardContent(
+          child: RecommendedDealsSection(
+            recommendations: viewModel.recommendations,
+            onOpenDeal: (deal) =>
+                _openDeal(context, deal, splitBoardViewModel, scrollController),
+            onDismiss: (deal) => _dismiss(context, viewModel, deal),
+          ),
+        ),
+      );
+    }
+
+    // Still working out the first set of picks: show the header and a couple of
+    // placeholder shapes rather than popping the strip in once it resolves.
+    if (viewModel.isLoading) {
+      return const Padding(
+        padding: _padding,
+        child: _BoardContent(child: _RecommendationsLoading()),
+      );
+    }
+
+    // Settled with nothing to show. If the student has set no categories, point
+    // them at where they would. If they have and still nothing matches, there
+    // is nothing to say — the board below is the whole answer.
+    if (viewModel.preferredCategories.isEmpty) {
+      return const Padding(
+        padding: _padding,
+        child: _BoardContent(child: _RecommendationsHint()),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  /// Dismisses, then — if the write failed and the card came back — says why.
+  /// The ViewModel has already restored the card by the time the future
+  /// completes, so the SnackBar is the only thing left to add.
+  Future<void> _dismiss(
+    BuildContext context,
+    RecommendationsViewModel viewModel,
+    Deal deal,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await viewModel.dismiss(deal.id);
+    if (!context.mounted) return;
+    final error = viewModel.dismissErrorMessage;
+    if (error != null) {
+      messenger.showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+}
+
+/// The strip's placeholder while the first recommendations resolve. Mirrors the
+/// real section's header and a short row of card-shaped blanks.
+class _RecommendationsLoading extends StatelessWidget {
+  const _RecommendationsLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final cardHeight = 176.0 * (textScale > 1 ? textScale : 1);
+
+    return Semantics(
+      liveRegion: true,
+      label: 'Loading recommendations',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_outlined,
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text('Recommended for you', style: theme.textTheme.titleSmall),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: cardHeight,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const NeverScrollableScrollPhysics(),
+                clipBehavior: Clip.none,
+                itemCount: 2,
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
+                itemBuilder: (context, index) => DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const SizedBox(width: 250),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown once recommendations have settled empty and the student has chosen no
+/// categories: a slim nudge towards the profile, where the picks come from.
+class _RecommendationsHint extends StatelessWidget {
+  const _RecommendationsHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      key: const Key('recommendations-empty-hint'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.auto_awesome_outlined,
+            size: 18,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Set your preferred categories in your profile to get deal picks here.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

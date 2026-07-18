@@ -108,6 +108,51 @@ void main() {
       }
     });
 
+    test('stores recommendation preferences and dismissals behind RLS', () {
+      final all = allMigrations();
+
+      // Preferred categories live on profiles, constrained to the same four
+      // categories the deals table allows.
+      expect(all, contains('add column if not exists preferred_categories'));
+      expect(all, contains('profiles_preferred_categories_valid'));
+      expect(
+        all,
+        contains(
+          "preferred_categories <@ array['grocery', 'household', 'drinks', 'pantry']::text[]",
+        ),
+      );
+
+      // Dismissals are their own table behind own-row RLS.
+      expect(
+        all,
+        contains('create table if not exists public.dismissed_recommendations'),
+      );
+      expect(
+        all,
+        contains(
+          'alter table public.dismissed_recommendations enable row level security',
+        ),
+      );
+      expect(all, contains('dismissed select own rows'));
+      expect(all, contains('dismissed insert own row'));
+      expect(all, contains('dismissed delete own row'));
+      // Indexed on deal_id, the foreign key column, not on user_id -- the
+      // primary key already leads with user_id, so a second index there would
+      // just duplicate it.
+      expect(all, contains('dismissed_recommendations_deal_id_idx'));
+      expect(all, isNot(contains('dismissed_recommendations_user_id_idx')));
+
+      // The dismissals table names deals, which must already exist by then.
+      expect(
+        all.indexOf('create table if not exists public.deals'),
+        lessThan(
+          all.indexOf(
+            'create table if not exists public.dismissed_recommendations',
+          ),
+        ),
+      );
+    });
+
     test('rejects sub-centavo deal prices in schema source', () {
       final all = allMigrations();
 

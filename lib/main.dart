@@ -8,6 +8,7 @@ import 'data/repositories/auth_repository.dart';
 import 'data/repositories/deal_repository.dart';
 import 'data/repositories/hub_repository.dart';
 import 'data/repositories/notification_repository.dart';
+import 'data/repositories/recommendation_repository.dart';
 import 'data/repositories/reservation_repository.dart';
 import 'data/repositories/report_repository.dart';
 import 'data/repositories/supabase_auth_repository.dart';
@@ -46,6 +47,9 @@ Future<void> main() async {
     currentUserId: () => client.auth.currentUser!.id,
     invalidationSource: SupabaseReportInvalidationSource(client),
   );
+  final recommendationRepository = SupabaseRecommendationRepository(
+    gateway: PostgrestSupabaseRecommendationGateway(client),
+  );
   runApp(
     BulkBuyingCompanionApp(
       authRepository: repository,
@@ -53,6 +57,7 @@ Future<void> main() async {
       dealRepository: dealRepository,
       reservationRepository: reservationRepository,
       reportRepository: reportRepository,
+      recommendationRepository: recommendationRepository,
       notificationInvalidationSource: SupabaseNotificationInvalidationSource(
         client,
       ),
@@ -68,6 +73,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     this.dealRepository,
     this.reservationRepository,
     this.reportRepository,
+    this.recommendationRepository,
     this.notificationInvalidationSource,
     this.locationService,
   });
@@ -77,6 +83,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
   final DealRepository? dealRepository;
   final ReservationRepository? reservationRepository;
   final ReportRepository? reportRepository;
+  final RecommendationRepository? recommendationRepository;
   final NotificationInvalidationSource? notificationInvalidationSource;
   final LocationService? locationService;
 
@@ -109,6 +116,11 @@ class BulkBuyingCompanionApp extends StatelessWidget {
         ),
         Provider<ReportRepository>(
           create: (_) => reportRepository ?? MockReportRepository(),
+        ),
+        Provider<RecommendationRepository>(
+          create: (_) =>
+              recommendationRepository ?? MockRecommendationRepository(),
+          dispose: (_, repository) => repository.dispose(),
         ),
         Provider<NotificationRepository>(
           create: (context) => DerivedNotificationRepository(

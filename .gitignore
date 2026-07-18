@@ -1,5 +1,6 @@
 # Miscellaneous
 .env
+supabase/.temp/
 *.class
 *.log
 *.pyc
