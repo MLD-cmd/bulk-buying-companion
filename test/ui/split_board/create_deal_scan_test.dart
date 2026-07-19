@@ -140,4 +140,54 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('scanning a barcode adds editable barcode context', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<DealRepository>.value(value: _FakeDealRepository()),
+          Provider<ReceiptScanner>.value(
+            value: MockReceiptScanner(
+              result: const ReceiptExtraction(barcodeValue: '4801234567890'),
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).push(CreateDealScreen.route('colon', 'Colon Street Hub')),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('deal-scan-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('scan-source-camera')));
+    await tester.pumpAndSettle();
+
+    final description = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const Key('deal-description-field')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(description.controller?.text, 'Barcode: 4801234567890');
+    expect(
+      find.text('Barcode scanned — add the product details before publishing.'),
+      findsOneWidget,
+    );
+  });
 }

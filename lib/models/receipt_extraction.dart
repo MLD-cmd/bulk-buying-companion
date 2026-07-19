@@ -77,6 +77,7 @@ class ReceiptExtraction {
     this.totalPrice,
     this.amount,
     this.unit,
+    this.barcodeValue,
     this.rawText = '',
   });
 
@@ -93,6 +94,10 @@ class ReceiptExtraction {
   final double? amount;
   final DealUnit? unit;
 
+  /// A product barcode read from the photo. It is useful context, not a product
+  /// catalogue lookup, so the poster still fills in the human-readable details.
+  final String? barcodeValue;
+
   /// The full recognised text, kept so the parser's guesses can be checked
   /// against what was actually read.
   final String rawText;
@@ -101,7 +106,10 @@ class ReceiptExtraction {
   /// the caller can tell the student the scan came up empty rather than
   /// silently doing nothing.
   bool get isEmpty =>
-      productName == null && totalPrice == null && amount == null;
+      productName == null &&
+      totalPrice == null &&
+      amount == null &&
+      barcodeValue == null;
 }
 
 /// Turns raw OCR text into a [ReceiptExtraction]. Pure and synchronous: it is
@@ -255,9 +263,16 @@ class ReceiptParser {
   List<double> _amountsIn(String line) {
     return [
       for (final match in _money.allMatches(line))
-        if (double.tryParse(match.group(1)!.replaceAll(',', '')) case final v?)
-          if (v > 0) v,
+        if (!_looksLikeBarcodeDigits(match.group(1)!))
+          if (double.tryParse(match.group(1)!.replaceAll(',', ''))
+              case final v?)
+            if (v > 0) v,
     ];
+  }
+
+  bool _looksLikeBarcodeDigits(String token) {
+    final compact = token.replaceAll(RegExp(r'\s'), '');
+    return RegExp(r'^\d{8,14}$').hasMatch(compact);
   }
 
   DealUnit? _unitFromToken(String token) {

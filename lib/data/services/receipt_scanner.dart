@@ -1,3 +1,4 @@
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -62,11 +63,12 @@ class MlKitReceiptScanner implements ReceiptScanner {
     // reaches for a plugin — a widget test can wire it up without the native
     // text recognizer being present. Always closed, so the native recognizer
     // is not leaked when a scan fails.
+    final inputImage = InputImage.fromFilePath(photo.path);
+    final barcodeScanner = BarcodeScanner(formats: [BarcodeFormat.all]);
     final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
     try {
-      final recognised = await recognizer.processImage(
-        InputImage.fromFilePath(photo.path),
-      );
+      final barcodeValue = await _scanBarcode(barcodeScanner, inputImage);
+      final recognised = await recognizer.processImage(inputImage);
       // Rebuild the receipt's rows from where each line sits, so a label and
       // the amount beside it are read together rather than in the column-by-
       // column order OCR returns them in.
@@ -80,14 +82,40 @@ class MlKitReceiptScanner implements ReceiptScanner {
               left: line.boundingBox.left,
             ),
       ];
-      return _parser.parse(assembleReceiptText(lines));
+      final extraction = _parser.parse(assembleReceiptText(lines));
+      return ReceiptExtraction(
+        productName: extraction.productName,
+        totalPrice: extraction.totalPrice,
+        amount: extraction.amount,
+        unit: extraction.unit,
+        barcodeValue: barcodeValue,
+        rawText: extraction.rawText,
+      );
     } catch (_) {
       throw const ReceiptScanFailure(
-        'Could not read that photo. Try a clearer, flatter shot of the receipt.',
+        'Could not read that photo. Try a clearer, flatter shot of the receipt or barcode.',
       );
     } finally {
+      await barcodeScanner.close();
       await recognizer.close();
     }
+  }
+
+  Future<String?> _scanBarcode(
+    BarcodeScanner scanner,
+    InputImage inputImage,
+  ) async {
+    final List<Barcode> barcodes;
+    try {
+      barcodes = await scanner.processImage(inputImage);
+    } catch (_) {
+      return null;
+    }
+    for (final barcode in barcodes) {
+      final value = (barcode.rawValue ?? barcode.displayValue)?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
   }
 }
 
@@ -116,6 +144,7 @@ class MockReceiptScanner implements ReceiptScanner {
           totalPrice: 900,
           amount: 25,
           unit: DealUnit.kg,
+          barcodeValue: '4801234567890',
           rawText: 'SUPER SAVER MART\nRice Sack 25kg 900.00\nTOTAL 900.00',
         );
   }

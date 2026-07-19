@@ -102,6 +102,22 @@ void main() {
       expect(result.amount, isNull);
     });
 
+    test('a barcode-only scan is still a useful extraction', () {
+      const result = ReceiptExtraction(barcodeValue: '4801234567890');
+
+      expect(result.isEmpty, isFalse);
+      expect(result.barcodeValue, '4801234567890');
+    });
+
+    test('does not treat long barcode digits as the receipt total', () {
+      final result = parser.parse(
+        '4801234567890\n'
+        'Rice Sack 25kg 900.00',
+      );
+
+      expect(result.totalPrice, 900.0);
+    });
+
     test('parses a column-separated receipt reassembled by position', () {
       // Reproduces what ML Kit returned for a real receipt: every label first,
       // then every amount, in separate blocks. Laid out by position, the labels

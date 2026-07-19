@@ -3,6 +3,9 @@
          registering a hub. We never track the student in the background. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Needed when testing receipt and barcode capture on a physical device. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="bulk_buying_companion"
         android:name="${applicationName}"

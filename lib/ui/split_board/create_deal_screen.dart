@@ -628,6 +628,19 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
     }
 
     _applyExtraction(extraction);
+    if (extraction.productName == null &&
+        extraction.totalPrice == null &&
+        extraction.amount == null &&
+        extraction.barcodeValue != null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Barcode scanned — add the product details before publishing.',
+          ),
+        ),
+      );
+      return;
+    }
     messenger.showSnackBar(
       const SnackBar(
         content: Text('Scanned — check the details before publishing.'),
@@ -653,8 +666,22 @@ class _CreateDealScreenState extends State<CreateDealScreen> {
       if (extraction.unit case final unit?) {
         _unit = unit;
       }
+      if (extraction.barcodeValue case final barcode?) {
+        _descriptionController.text = _descriptionWithBarcode(
+          _descriptionController.text,
+          barcode,
+        );
+      }
       _isDirty = true;
     });
+  }
+
+  String _descriptionWithBarcode(String current, String barcode) {
+    final trimmed = current.trim();
+    final line = 'Barcode: $barcode';
+    if (trimmed.isEmpty) return line;
+    if (trimmed.contains(line)) return trimmed;
+    return '$trimmed\n$line';
   }
 
   /// 900.0 -> '900', 12.5 -> '12.5': the fields hold plain typed numbers, so a
