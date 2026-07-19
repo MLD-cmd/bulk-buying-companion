@@ -78,6 +78,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
     this.notificationInvalidationSource,
     this.locationService,
     this.receiptScanner,
+    this.showStartupSplash = true,
   });
 
   final AuthRepository? authRepository;
@@ -89,6 +90,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
   final NotificationInvalidationSource? notificationInvalidationSource;
   final LocationService? locationService;
   final ReceiptScanner? receiptScanner;
+  final bool showStartupSplash;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +153,84 @@ class BulkBuyingCompanionApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
-        home: const AuthGate(),
+        home: showStartupSplash
+            ? const StartupSplashGate()
+            : const AuthGate(key: ValueKey('auth-gate')),
+      ),
+    );
+  }
+}
+
+class StartupSplashGate extends StatefulWidget {
+  const StartupSplashGate({super.key});
+
+  @override
+  State<StartupSplashGate> createState() => _StartupSplashGateState();
+}
+
+class _StartupSplashGateState extends State<StartupSplashGate> {
+  bool _showSplash = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      if (!mounted) return;
+      setState(() => _showSplash = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      child: _showSplash
+          ? const AppSplashScreen(key: ValueKey('startup-splash'))
+          : const AuthGate(key: ValueKey('auth-gate')),
+    );
+  }
+}
+
+class AppSplashScreen extends StatelessWidget {
+  const AppSplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Scaffold(
+      key: const Key('app-splash-screen'),
+      backgroundColor: const Color(0xFFEAF7F5),
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/branding/splash_logo.png',
+                width: 132,
+                height: 132,
+                filterQuality: FilterQuality.high,
+              ),
+              const SizedBox(height: 22),
+              Text(
+                'Campus Split-Share',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Bulk buys, split fairly.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

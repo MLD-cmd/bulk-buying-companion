@@ -35,6 +35,8 @@ flutter:
 
   assets:
     - .env
+    - assets/branding/app_icon.png
+    - assets/branding/splash_logo.png
 
   fonts:
     - family: Manrope

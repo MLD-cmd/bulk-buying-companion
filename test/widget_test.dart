@@ -24,9 +24,31 @@ void main() {
         hubRepository: hubRepository,
         reservationRepository: const _EmptyReservationRepository(),
         locationService: locationService ?? const _StubLocationService(),
+        showStartupSplash: false,
       ),
     );
   }
+
+  testWidgets('app shows a branded splash before authentication', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      BulkBuyingCompanionApp(
+        authRepository: MockAuthRepository(),
+        reservationRepository: const _EmptyReservationRepository(),
+        locationService: const _StubLocationService(),
+      ),
+    );
+
+    expect(find.byKey(const Key('app-splash-screen')), findsOneWidget);
+    expect(find.text('Campus Split-Share'), findsOneWidget);
+    expect(find.text('Welcome back'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome back'), findsOneWidget);
+  });
 
   /// Taps Join on a named hub. The list is sorted by distance, so the card at
   /// a given position depends on where [_StubLocationService] puts the student
