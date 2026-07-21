@@ -1,5 +1,24 @@
 import 'package:flutter/material.dart';
 
+/// Replaces Android's default edge-of-list stretch effect with the glow
+/// indicator used elsewhere, so scrolling doesn't visibly distort content.
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    return GlowingOverscrollIndicator(
+      axisDirection: details.direction,
+      color: Theme.of(context).colorScheme.primary,
+      child: child,
+    );
+  }
+}
+
 /// Shared visual language for the campus co-op experience.
 ///
 /// Screens consume semantic roles from [ColorScheme] and these few additional

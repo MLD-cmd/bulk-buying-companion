@@ -151,6 +151,7 @@ class BulkBuyingCompanionApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Campus Split-Share',
         debugShowCheckedModeBanner: false,
+        scrollBehavior: const AppScrollBehavior(),
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         home: showStartupSplash
